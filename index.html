@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#071a22" />
+    <meta
+      name="description"
+      content="Sort Factory: aprenda Quick Sort organizando uma linha de produção."
+    />
+    <title>Sort Factory — Protocolo Pivô</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="game-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <p class="eyebrow">PROTOCOLO PIVÔ</p>
+          <h1>SORT <span>FACTORY</span></h1>
+        </div>
+
+        <section class="mission-panel" aria-live="polite">
+          <p class="panel-label">OBJETIVO ATUAL</p>
+          <p id="objective" class="objective">Inicializando a linha de triagem…</p>
+        </section>
+
+        <div class="topbar-actions">
+          <button id="help-button" class="hud-button" type="button">Como jogar</button>
+          <button id="restart-button" class="hud-button hud-button--danger" type="button">
+            Reiniciar
+          </button>
+        </div>
+      </header>
+
+      <section class="game-stage" aria-label="Área do jogo Sort Factory">
+        <canvas id="game-canvas" width="1280" height="720" tabindex="0">
+          Seu navegador precisa oferecer suporte ao Canvas 2D para executar o jogo.
+        </canvas>
+
+        <div id="status-message" class="status-message" role="status" aria-live="polite"></div>
+
+        <aside class="stats-panel" aria-label="Estado da partida">
+          <div class="stat">
+            <span class="stat__label">PIVÔ</span>
+            <strong id="pivot-value" class="stat__value stat__value--pivot">—</strong>
+          </div>
+          <div class="stat">
+            <span class="stat__label">TRECHO</span>
+            <strong id="active-range" class="stat__value">—</strong>
+          </div>
+          <div class="stat">
+            <span class="stat__label">PONTOS</span>
+            <strong id="score" class="stat__value">1000</strong>
+          </div>
+          <div class="stat">
+            <span class="stat__label">ERROS</span>
+            <strong id="errors" class="stat__value">0</strong>
+          </div>
+        </aside>
+
+        <div class="controls-hint" aria-hidden="true">
+          <span><kbd>WASD</kbd> / <kbd>↑↓←→</kbd> mover</span>
+          <span><kbd>E</kbd> / <kbd>Espaço</kbd> interagir</span>
+        </div>
+      </section>
+
+      <section class="algorithm-strip" aria-label="Progresso do algoritmo">
+        <div>
+          <span class="panel-label">LINHA DE TRIAGEM</span>
+          <div id="array-readout" class="array-readout" aria-live="polite"></div>
+        </div>
+        <div class="legend" aria-label="Legenda visual">
+          <span><i class="legend__dot legend__dot--pivot"></i>Pivô</span>
+          <span><i class="legend__dot legend__dot--i"></i>Ponteiro i</span>
+          <span><i class="legend__dot legend__dot--j"></i>Ponteiro j</span>
+          <span><i class="legend__dot legend__dot--done"></i>Resolvido</span>
+        </div>
+      </section>
+    </main>
+
+    <div id="tutorial-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
+      <div class="modal__backdrop"></div>
+      <section class="modal__card modal__card--tutorial">
+        <div class="modal__accent"></div>
+        <p class="eyebrow">MANUAL DE MANUTENÇÃO</p>
+        <h2 id="tutorial-title">Missão</h2>
+        <div id="tutorial-illustration" class="tutorial-illustration" aria-hidden="true"></div>
+        <p id="tutorial-text" class="modal__text"></p>
+        <div id="tutorial-dots" class="tutorial-dots" aria-label="Progresso do tutorial"></div>
+        <div class="modal__actions modal__actions--spread">
+          <button id="tutorial-skip" class="text-button" type="button">Pular tutorial</button>
+          <div>
+            <button id="tutorial-back" class="secondary-button" type="button">Voltar</button>
+            <button id="tutorial-next" class="primary-button" type="button">Avançar</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div id="victory-modal" class="modal modal--hidden" role="dialog" aria-modal="true" aria-labelledby="victory-title">
+      <div class="modal__backdrop"></div>
+      <section class="modal__card modal__card--victory">
+        <div class="victory-badge" aria-hidden="true">✓</div>
+        <p class="eyebrow">PROTOCOLO CONCLUÍDO</p>
+        <h2 id="victory-title">Linha reativada!</h2>
+        <p class="modal__text">Você posicionou cada pivô e ordenou todos os subarrays.</p>
+        <p id="victory-array" class="victory-array"></p>
+        <div class="victory-stats">
+          <span>Pontuação <strong id="victory-score">0</strong></span>
+          <span>Erros <strong id="victory-errors">0</strong></span>
+        </div>
+        <button id="play-again-button" class="primary-button primary-button--wide" type="button">
+          Jogar novamente
+        </button>
+      </section>
+    </div>
+
+    <script src="js/constants.js" defer></script>
+    <script src="js/utils.js" defer></script>
+    <script src="js/quick-sort-engine.js" defer></script>
+    <script src="js/input-controller.js" defer></script>
+    <script src="js/ui-controller.js" defer></script>
+    <script src="js/renderer.js" defer></script>
+    <script src="js/game.js" defer></script>
+  </body>
+</html>
