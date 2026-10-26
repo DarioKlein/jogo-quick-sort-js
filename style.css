@@ -359,7 +359,9 @@ kbd {
   position: relative;
   z-index: 1;
   width: min(580px, 100%);
-  overflow: hidden;
+  max-height: calc(100vh - 40px);
+  overflow-x: hidden;
+  overflow-y: auto;
   border: 1px solid rgba(112, 218, 229, 0.28);
   border-radius: 18px;
   background:
@@ -372,6 +374,10 @@ kbd {
 .modal__card--victory {
   max-width: 500px;
   text-align: center;
+}
+
+.modal__card--start {
+  width: min(820px, 100%);
 }
 
 .modal__accent {
@@ -392,6 +398,154 @@ kbd {
   color: #bad4d9;
   font-size: 1.03rem;
   line-height: 1.65;
+}
+
+.modal__text--start {
+  min-height: 0;
+  margin-bottom: 24px;
+}
+
+.pivot-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 0 0 24px;
+}
+
+.pivot-option {
+  display: flex;
+  min-width: 0;
+  min-height: 166px;
+  flex-direction: column;
+  align-items: flex-start;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: rgba(12, 46, 56, 0.72);
+  padding: 18px;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+
+.pivot-option:hover {
+  border-color: rgba(255, 200, 69, 0.58);
+  transform: translateY(-2px);
+}
+
+.pivot-option.is-selected {
+  border-color: var(--gold);
+  background: rgba(255, 200, 69, 0.1);
+  box-shadow: 0 0 24px rgba(255, 200, 69, 0.1);
+}
+
+.pivot-option strong {
+  margin-top: 14px;
+  color: white;
+  font-size: 1.05rem;
+}
+
+.pivot-option small {
+  margin-top: 5px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.pivot-option__diagram {
+  display: flex;
+  width: 100%;
+  gap: 6px;
+}
+
+.pivot-option__diagram i {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid #50727a;
+  border-radius: 5px;
+  background: #173943;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.pivot-option__diagram i.is-pivot {
+  border-color: var(--gold);
+  background: rgba(255, 200, 69, 0.15);
+  color: var(--gold);
+  box-shadow: 0 0 12px rgba(255, 200, 69, 0.18);
+}
+
+.menu-section-label {
+  margin: 4px 0 10px;
+  color: var(--muted);
+  font-size: 0.67rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+
+.phase-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.phase-option {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 126px;
+  flex-direction: column;
+  align-items: flex-start;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(9, 37, 46, 0.78);
+  padding: 16px;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+
+.phase-option:hover {
+  border-color: rgba(48, 230, 242, 0.62);
+  transform: translateY(-2px);
+}
+
+.phase-option.is-selected {
+  border-color: var(--cyan);
+  background: rgba(48, 230, 242, 0.1);
+  box-shadow: 0 0 22px rgba(48, 230, 242, 0.1);
+}
+
+.phase-option__number {
+  position: absolute;
+  top: 8px;
+  right: 11px;
+  color: rgba(131, 170, 180, 0.24);
+  font-size: 2rem;
+  font-weight: 950;
+}
+
+.phase-option strong {
+  position: relative;
+  margin: 6px 0 8px;
+  font-size: 1rem;
+}
+
+.phase-option small {
+  color: var(--muted);
+}
+
+.phase-option em {
+  margin-top: auto;
+  padding-top: 10px;
+  color: var(--cyan);
+  font-size: 0.74rem;
+  font-style: normal;
+  font-weight: 850;
 }
 
 .tutorial-illustration {
@@ -446,6 +600,29 @@ kbd {
   font-family: Consolas, monospace;
   font-size: 1.35rem;
   font-weight: 800;
+}
+
+.victory-phase {
+  margin: 14px 0 0;
+  color: var(--cyan);
+  font-size: 0.8rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.victory-lesson {
+  border: 1px solid rgba(48, 230, 242, 0.2);
+  border-radius: 9px;
+  background: rgba(48, 230, 242, 0.06);
+  padding: 12px 14px;
+  color: #b8d8dd;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.victory-actions {
+  display: grid;
+  gap: 9px;
 }
 
 .victory-stats {
@@ -527,6 +704,18 @@ kbd {
   .modal__actions--spread > div {
     display: grid;
     grid-template-columns: 1fr 1fr;
+  }
+
+  .pivot-options {
+    grid-template-columns: 1fr;
+  }
+
+  .phase-options {
+    grid-template-columns: 1fr;
+  }
+
+  .pivot-option {
+    min-height: 138px;
   }
 }
 

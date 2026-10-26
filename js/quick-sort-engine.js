@@ -1,13 +1,33 @@
 (function initializeQuickSortEngine(namespace) {
   "use strict";
 
-  const { GameState, INITIAL_ARRAY, INITIAL_SCORE } = namespace.Constants;
+  const {
+    GameState,
+    PivotStrategy,
+    INITIAL_ARRAY,
+    INITIAL_SCORE,
+  } = namespace.Constants;
   const { isSorted } = namespace.Utils;
 
   class QuickSortEngine {
-    constructor(initialValues = INITIAL_ARRAY) {
+    constructor(initialValues = INITIAL_ARRAY, pivotStrategy = PivotStrategy.FIRST) {
       this.initialValues = [...initialValues];
+      this.pivotStrategy = this._validatePivotStrategy(pivotStrategy);
       this.listeners = new Set();
+      this.reset();
+    }
+
+    setPivotStrategy(pivotStrategy) {
+      this.pivotStrategy = this._validatePivotStrategy(pivotStrategy);
+      this.reset();
+    }
+
+    configure(initialValues, pivotStrategy) {
+      if (!Array.isArray(initialValues) || initialValues.length < 2) {
+        throw new TypeError("A fase precisa conter ao menos dois valores.");
+      }
+      this.initialValues = [...initialValues];
+      this.pivotStrategy = this._validatePivotStrategy(pivotStrategy);
       this.reset();
     }
 
@@ -64,7 +84,7 @@
         if (canAdvance) {
           this.i += 1;
           this.message = `${currentValue} pode permanecer à esquerda. O ponteiro i avançou.`;
-          if (this.i > this.segment.end) {
+          if (this._isIBeyondScan()) {
             this.state = GameState.INSPECT_J;
             this.message += " Agora inspecione o ponteiro j.";
           }
@@ -84,7 +104,7 @@
         if (mustRetreat) {
           this.j -= 1;
           this.message = `${currentValue} deve ficar à direita. O ponteiro j recuou.`;
-          if (this.j <= this.segment.start) {
+          if (this._isJBeyondScan()) {
             this._evaluatePointers();
           }
         } else {
@@ -104,7 +124,7 @@
 
       const pair = this.state === GameState.SWAP_I_J
         ? [this.i, this.j]
-        : [this.pivotIndex, this.j];
+        : [this.pivotIndex, this._getPivotTargetIndex()];
       const allowed = new Set(pair);
 
       if (!allowed.has(index)) {
@@ -119,7 +139,7 @@
 
       if (this.selected === null) {
         this.selected = index;
-        this.message = "Primeira caixa selecionada. Vá até a outra caixa destacada.";
+        this.message = "Caixa nas mãos do robô. Leve-a até a outra posição destacada.";
         this._emit();
         return { ok: true, type: "selected", index };
       }
@@ -143,6 +163,10 @@
       };
     }
 
+    rejectInteraction(message, penalty = 40) {
+      return this._reject(message, penalty);
+    }
+
     completeSwap(a, b) {
       if (this.state !== GameState.SWAP_I_J && this.state !== GameState.PLACE_PIVOT) {
         return { ok: false };
@@ -152,7 +176,7 @@
       [this.values[a], this.values[b]] = [this.values[b], this.values[a]];
 
       if (isPivotPlacement) {
-        const finalPivotIndex = this.j;
+        const finalPivotIndex = this._getPivotTargetIndex();
         this.resolved.add(finalPivotIndex);
         this.score += 100;
         this.message = `Pivô ${this.pivotValue} fixado na posição ${finalPivotIndex + 1}.`;
@@ -165,7 +189,7 @@
         this.state = GameState.INSPECT_I;
         this.message = "Troca concluída. Continue a busca com o ponteiro i.";
 
-        if (this.i > this.segment.end) {
+        if (this._isIBeyondScan()) {
           this.state = GameState.INSPECT_J;
         }
       }
@@ -183,9 +207,9 @@
         case GameState.SWAP_I_J:
           return `Troque as caixas apontadas por i e j (posições ${this.i + 1} e ${this.j + 1}).`;
         case GameState.PLACE_PIVOT:
-          return this.pivotIndex === this.j
+          return this.pivotIndex === this._getPivotTargetIndex()
             ? "Confirme o pivô: ele já está na posição correta."
-            : `Troque o pivô com a caixa na posição ${this.j + 1}.`;
+            : `Troque o pivô com a caixa na posição ${this._getPivotTargetIndex() + 1}.`;
         case GameState.VICTORY:
           return "Linha reativada — todas as caixas estão ordenadas!";
         default:
@@ -203,6 +227,10 @@
         segment: this.segment ? { ...this.segment } : null,
         pivotIndex: this.pivotIndex,
         pivotValue: this.pivotValue,
+        pivotStrategy: this.pivotStrategy,
+        pivotTargetIndex: this.state === GameState.PLACE_PIVOT
+          ? this._getPivotTargetIndex()
+          : null,
         i: this.i,
         j: this.j,
         state: this.state,
@@ -242,6 +270,7 @@
     }
 
     _startNextSegment() {
+      this.selected = null;
       if (this.pendingSegments.length === 0) {
         this.values.forEach((_, index) => this.resolved.add(index));
         if (!isSorted(this.values)) {
@@ -259,13 +288,36 @@
       }
 
       this.segment = this.pendingSegments.pop();
-      this.pivotIndex = this.segment.start;
+      const pivotAtStart = this.pivotStrategy === PivotStrategy.FIRST;
+      this.pivotIndex = pivotAtStart ? this.segment.start : this.segment.end;
       this.pivotValue = this.values[this.pivotIndex];
-      this.i = this.segment.start + 1;
-      this.j = this.segment.end;
-      this.selected = null;
+      this.i = pivotAtStart ? this.segment.start + 1 : this.segment.start;
+      this.j = pivotAtStart ? this.segment.end : this.segment.end - 1;
       this.state = GameState.INSPECT_I;
       this.message = `Novo trecho: posições ${this.segment.start + 1}–${this.segment.end + 1}. Pivô ${this.pivotValue}.`;
+    }
+
+    _getPivotTargetIndex() {
+      return this.pivotStrategy === PivotStrategy.FIRST ? this.j : this.i;
+    }
+
+    _isIBeyondScan() {
+      return this.pivotStrategy === PivotStrategy.FIRST
+        ? this.i > this.segment.end
+        : this.i >= this.segment.end;
+    }
+
+    _isJBeyondScan() {
+      return this.pivotStrategy === PivotStrategy.FIRST
+        ? this.j <= this.segment.start
+        : this.j < this.segment.start;
+    }
+
+    _validatePivotStrategy(pivotStrategy) {
+      if (!Object.values(PivotStrategy).includes(pivotStrategy)) {
+        throw new TypeError(`Estratégia de pivô inválida: ${pivotStrategy}`);
+      }
+      return pivotStrategy;
     }
 
     _reject(message, penalty = 40) {

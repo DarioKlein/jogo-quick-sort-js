@@ -8,8 +8,10 @@
     BOX_GAP,
     INTERACTION_Y,
     INTERACTION_DISTANCE,
-    SWAP_DURATION,
+    HANDOFF_DURATION,
+    PLACE_DURATION,
     GameState,
+    PHASES,
   } = namespace.Constants;
   const { clamp } = namespace.Utils;
 
@@ -20,10 +22,11 @@
       this.input = new namespace.InputController();
       this.ui = new namespace.UiController();
       this.renderer = new namespace.Renderer(this.canvas);
+      this.currentPhase = PHASES[0];
 
       this.robot = this._createRobot();
       this.nearbyIndex = null;
-      this.swapAnimation = null;
+      this.manualSwap = null;
       this.paused = false;
       this.modalOpen = true;
       this.victoryShown = false;
@@ -32,6 +35,7 @@
 
       this._bindEvents();
       this.engine.subscribe((snapshot) => this._handleStateChange(snapshot));
+      this.ui.setPhase(this.currentPhase);
       this.ui.update(this.engine.getSnapshot());
       this.input.enabled = false;
       this.canvas.setAttribute("aria-describedby", "objective");
@@ -41,7 +45,8 @@
     }
 
     restart() {
-      this.swapAnimation = null;
+      this.manualSwap = null;
+      this.renderer.resetEffects();
       this.robot = this._createRobot();
       this.nearbyIndex = null;
       this.paused = false;
@@ -62,6 +67,12 @@
         if (!isOpen) this.canvas.focus();
       };
       this.ui.onRestart = () => this.restart();
+      this.ui.onStart = (pivotStrategy, phaseId) => this._startPhase(phaseId, pivotStrategy, true);
+      this.ui.onPlayAgain = () => this._returnToStartMenu();
+      this.ui.onNextPhase = () => {
+        const nextPhase = this._getNextPhase();
+        if (nextPhase) this._startPhase(nextPhase.id, this.engine.pivotStrategy, false);
+      };
 
       window.addEventListener("blur", () => {
         if (!this.modalOpen && !this.victoryShown) this.paused = true;
@@ -86,7 +97,8 @@
         this.victoryShown = true;
         this.input.enabled = false;
         this.renderer.celebrate();
-        window.setTimeout(() => this.ui.showVictory(snapshot), 900);
+        const nextPhase = this._getNextPhase();
+        window.setTimeout(() => this.ui.showVictory(snapshot, this.currentPhase, nextPhase), 900);
       }
     }
 
@@ -99,10 +111,16 @@
       }
 
       const snapshot = this.engine.getSnapshot();
-      const animationForFrame = this.swapAnimation
+      const manualSwapForFrame = this.manualSwap
         ? {
-            ...this.swapAnimation,
-            progress: clamp((time - this.swapAnimation.startedAt) / this.swapAnimation.duration, 0, 1),
+            ...this.manualSwap,
+            phaseProgress: this.manualSwap.phase === "carry-back"
+              ? 1
+              : clamp(
+                  (time - this.manualSwap.startedAt) / this._getManualPhaseDuration(this.manualSwap.phase),
+                  0,
+                  1,
+                ),
           }
         : null;
 
@@ -111,7 +129,7 @@
         snapshot,
         robot: this.robot,
         nearbyIndex: this.nearbyIndex,
-        swapAnimation: animationForFrame,
+        manualSwap: manualSwapForFrame,
         paused: this.paused,
         modalOpen: this.modalOpen || this.victoryShown,
         victory: snapshot.state === GameState.VICTORY,
@@ -121,16 +139,10 @@
     }
 
     _update(delta, time) {
-      if (this.swapAnimation) {
-        const progress = (time - this.swapAnimation.startedAt) / this.swapAnimation.duration;
-        if (progress >= 1) {
-          const { a, b, pivot } = this.swapAnimation;
-          this.swapAnimation = null;
-          this.engine.completeSwap(a, b);
-          this.ui.showStatus(
-            pivot ? "Pivô colocado em sua posição definitiva." : "Caixas trocadas corretamente.",
-          );
-        }
+      if (this.manualSwap && this.manualSwap.phase !== "carry-back") {
+        const duration = this._getManualPhaseDuration(this.manualSwap.phase);
+        const progress = (time - this.manualSwap.startedAt) / duration;
+        if (progress >= 1) this._advanceManualSwap(time);
         return;
       }
 
@@ -138,7 +150,11 @@
       this.nearbyIndex = this._findNearbyBox();
 
       if (this.input.consumeInteraction()) {
-        this._interact();
+        if (this.manualSwap?.phase === "carry-back") {
+          this._placeDisplacedBox();
+        } else {
+          this._interact();
+        }
       }
     }
 
@@ -193,23 +209,111 @@
       }
 
       if (result.type === "swap-requested") {
-        this._beginSwap(result);
+        this._beginManualSwap(result);
       }
     }
 
-    _beginSwap({ a, b, pivot }) {
-      const duration = this.reducedMotion.matches || a === b ? 180 : SWAP_DURATION;
-      this.swapAnimation = {
+    _beginManualSwap({ a, b, pivot }) {
+      this.manualSwap = {
         a,
         b,
         pivot,
+        phase: a === b ? "placing" : "handoff",
         startedAt: performance.now(),
-        duration,
       };
+      this.ui.setObjective(
+        a === b
+          ? "Confirme o encaixe do pivô."
+          : "Apoiando a primeira caixa e transferindo a outra para as mãos do robô…",
+      );
+    }
+
+    _advanceManualSwap(time) {
+      if (this.manualSwap.phase === "handoff") {
+        this.manualSwap.phase = "carry-back";
+        this.manualSwap.startedAt = time;
+        const displacedValue = this.engine.values[this.manualSwap.b];
+        const destination = this.manualSwap.a + 1;
+        const message = `Caixa ${displacedValue} nas mãos. Leve-a até a posição ${destination} e pressione E.`;
+        this.ui.setObjective(message);
+        this.ui.showStatus(message);
+        return;
+      }
+
+      if (this.manualSwap.phase === "placing") {
+        const { a, b, pivot } = this.manualSwap;
+        this.manualSwap = null;
+        this.engine.completeSwap(a, b);
+        this.ui.showStatus(
+          pivot ? "Pivô colocado em sua posição definitiva." : "Troca manual concluída corretamente.",
+        );
+      }
+    }
+
+    _placeDisplacedBox() {
+      const destinationIndex = this.manualSwap.a;
+      if (this.nearbyIndex !== destinationIndex) {
+        const message = `A caixa deve ser levada até a posição ${destinationIndex + 1}, que ficou vazia.`;
+        this.engine.rejectInteraction(message, 40);
+        this.ui.setObjective(message);
+        this.ui.showStatus(message, true);
+        return;
+      }
+
+      this.manualSwap.phase = "placing";
+      this.manualSwap.startedAt = performance.now();
+      this.ui.setObjective(`Colocando a caixa na posição ${destinationIndex + 1}…`);
+    }
+
+    _getManualPhaseDuration(phase) {
+      const duration = phase === "handoff" ? HANDOFF_DURATION : PLACE_DURATION;
+      return this.reducedMotion.matches ? Math.min(duration, 180) : duration;
     }
 
     _createRobot() {
       return { x: BOX_START_X, y: 584, facing: 1, moving: false };
+    }
+
+    _startPhase(phaseId, pivotStrategy, showTutorial) {
+      const phase = PHASES.find((candidate) => candidate.id === phaseId) ?? PHASES[0];
+      this.currentPhase = phase;
+      this.manualSwap = null;
+      this.renderer.resetEffects();
+      this.robot = this._createRobot();
+      this.nearbyIndex = null;
+      this.paused = false;
+      this.victoryShown = false;
+      this.ui.hideVictory();
+      this.ui.setPhase(phase);
+      this.engine.configure(phase.values[pivotStrategy], pivotStrategy);
+      this.input.clear();
+
+      if (showTutorial) {
+        this.ui.openTutorial(true);
+      } else {
+        this.modalOpen = false;
+        this.input.enabled = true;
+        this.canvas.focus();
+        this.ui.showStatus(`Fase ${phase.number}: ${phase.title}. ${phase.description}`);
+      }
+    }
+
+    _getNextPhase() {
+      const currentIndex = PHASES.findIndex((phase) => phase.id === this.currentPhase.id);
+      return PHASES[currentIndex + 1] ?? null;
+    }
+
+    _returnToStartMenu() {
+      this.manualSwap = null;
+      this.renderer.resetEffects();
+      this.robot = this._createRobot();
+      this.nearbyIndex = null;
+      this.paused = false;
+      this.victoryShown = false;
+      this.input.enabled = false;
+      this.input.clear();
+      this.ui.hideVictory();
+      this.ui.showStartMenu(this.engine.pivotStrategy, this.currentPhase.id);
     }
   }
 

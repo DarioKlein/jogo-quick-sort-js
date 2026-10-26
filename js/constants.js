@@ -9,6 +9,59 @@
     VICTORY: "VICTORY",
   });
 
+  const PivotStrategy = Object.freeze({
+    FIRST: "FIRST",
+    LAST: "LAST",
+  });
+
+  const PhaseId = Object.freeze({
+    AVERAGE: "AVERAGE",
+    BEST: "BEST",
+    WORST: "WORST",
+  });
+
+  const PHASES = Object.freeze([
+    Object.freeze({
+      id: PhaseId.AVERAGE,
+      number: 1,
+      title: "Caso médio",
+      shortTitle: "MÉDIO",
+      complexity: "O(n log n) esperado",
+      description: "Partições irregulares, como acontece com dados comuns sem uma ordem especial.",
+      lesson: "Na média, as divisões ainda reduzem bem o problema e mantêm o Quick Sort eficiente.",
+      values: Object.freeze({
+        [PivotStrategy.FIRST]: Object.freeze([8, 3, 12, 5, 1, 10]),
+        [PivotStrategy.LAST]: Object.freeze([8, 3, 12, 5, 1, 10]),
+      }),
+    }),
+    Object.freeze({
+      id: PhaseId.BEST,
+      number: 2,
+      title: "Melhor caso",
+      shortTitle: "MELHOR",
+      complexity: "O(n log n)",
+      description: "Cada pivô divide o trecho em partes tão equilibradas quanto possível.",
+      lesson: "Divisões equilibradas reduzem a altura da recursão e o total de comparações.",
+      values: Object.freeze({
+        [PivotStrategy.FIRST]: Object.freeze([4, 1, 3, 2, 5, 6]),
+        [PivotStrategy.LAST]: Object.freeze([6, 5, 1, 2, 4, 3]),
+      }),
+    }),
+    Object.freeze({
+      id: PhaseId.WORST,
+      number: 3,
+      title: "Pior caso",
+      shortTitle: "PIOR",
+      complexity: "O(n²)",
+      description: "O vetor ordenado faz o pivô de extremidade gerar um trecho com n−1 elementos.",
+      lesson: "Divisões muito desequilibradas aprofundam a recursão e levam ao custo quadrático.",
+      values: Object.freeze({
+        [PivotStrategy.FIRST]: Object.freeze([1, 2, 3, 4, 5, 6]),
+        [PivotStrategy.LAST]: Object.freeze([1, 2, 3, 4, 5, 6]),
+      }),
+    }),
+  ]);
+
   namespace.Constants = Object.freeze({
     WIDTH: 1280,
     HEIGHT: 720,
@@ -20,8 +73,13 @@
     BOX_SIZE: 96,
     INTERACTION_Y: 505,
     INTERACTION_DISTANCE: 92,
-    SWAP_DURATION: 620,
+    HANDOFF_DURATION: 1000,
+    PLACE_DURATION: 520,
+    COMPARISON_DURATION: 3800,
     GameState,
+    PivotStrategy,
+    PhaseId,
+    PHASES,
     COLORS: Object.freeze({
       cyan: "#30e6f2",
       magenta: "#ef5bd7",
@@ -44,7 +102,7 @@
       }),
       Object.freeze({
         title: "O pivô",
-        text: "A primeira caixa de cada trecho é sempre o pivô. As demais serão organizadas ao redor do valor dele.",
+        text: "A caixa escolhida no menu será o pivô de cada trecho. As demais serão organizadas ao redor do valor dela.",
         art: "radial-gradient(circle at 25% 50%, rgba(255,200,69,.75) 0 13%, rgba(255,200,69,.16) 14% 23%, transparent 24%), linear-gradient(90deg,transparent 0 42%,rgba(255,255,255,.06) 42% 44%,transparent 44%), #0b2731",
       }),
       Object.freeze({

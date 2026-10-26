@@ -5,7 +5,7 @@
   "description": "Jogo educativo 2D de Quick Sort em JavaScript puro.",
   "scripts": {
     "check": "node --check js/constants.js && node --check js/utils.js && node --check js/quick-sort-engine.js && node --check js/input-controller.js && node --check js/ui-controller.js && node --check js/renderer.js && node --check js/game.js",
-    "test": "node tests/quick-sort-engine.test.js"
+    "test": "node tests/quick-sort-engine.test.js && node tests/renderer-smoke.test.js"
   },
   "engines": {
     "node": ">=18"

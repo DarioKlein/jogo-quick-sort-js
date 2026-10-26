@@ -8,6 +8,7 @@
     BOX_GAP,
     BOX_Y,
     BOX_SIZE,
+    COMPARISON_DURATION,
     COLORS,
     GameState,
   } = namespace.Constants;
@@ -19,6 +20,8 @@
       this.context = canvas.getContext("2d");
       this.pointerPositions = { i: BOX_START_X, j: BOX_START_X };
       this.particles = [];
+      this.lastSelectedIndex = null;
+      this.pickupStartedAt = 0;
       this.lastTime = performance.now();
     }
 
@@ -34,11 +37,41 @@
 
       context.clearRect(0, 0, WIDTH, HEIGHT);
       this._drawBackground(now);
-      this._drawActiveSegment(frame.snapshot);
+      this._drawSegmentZones(frame.snapshot);
       this._drawConveyor(now, frame.victory);
       this._drawBoxes(frame, now);
       this._drawPointers(frame.snapshot, delta, now);
-      this._drawRobot(frame.robot, now, frame.nearbyIndex !== null);
+
+      if (frame.manualSwap) {
+        this._drawManualSwap(frame, now);
+      } else {
+        const carryingIndex = frame.snapshot.selected;
+        const isCarrying = carryingIndex !== null;
+        if (isCarrying) {
+          if (this.lastSelectedIndex !== carryingIndex) {
+            this.lastSelectedIndex = carryingIndex;
+            this.pickupStartedAt = now;
+          }
+          const pickupProgress = easeInOutCubic(clamp((now - this.pickupStartedAt) / 380, 0, 1));
+          const carriedX = lerp(this.boxX(carryingIndex), frame.robot.x, pickupProgress);
+          const carriedY = lerp(BOX_Y, frame.robot.y - 124, pickupProgress)
+            - Math.sin(pickupProgress * Math.PI) * 24;
+          this._drawRobot(frame.robot, now, this._isNearbyActionable(frame), pickupProgress > 0.32);
+          this._drawLooseBox({
+            x: carriedX,
+            y: carriedY,
+            value: frame.snapshot.values[carryingIndex],
+            index: carryingIndex,
+            snapshot: frame.snapshot,
+            now,
+          });
+          if (pickupProgress > 0.5) this._drawGripHands(carriedX, carriedY);
+        } else {
+          this.lastSelectedIndex = null;
+          this._drawRobot(frame.robot, now, this._isNearbyActionable(frame), false);
+        }
+      }
+
       this._drawComparison(frame.snapshot, now);
       this._drawParticles(delta);
 
@@ -60,6 +93,11 @@
           size: 3 + Math.random() * 5,
         });
       }
+    }
+
+    resetEffects() {
+      this.particles = [];
+      this.lastSelectedIndex = null;
     }
 
     _drawBackground(now) {
@@ -152,30 +190,114 @@
       context.fill();
     }
 
-    _drawActiveSegment(snapshot) {
+    _drawSegmentZones(snapshot) {
       if (!snapshot.segment) return;
+      this._drawLockedZones(snapshot);
+
       const context = this.context;
-      const startX = this.boxX(snapshot.segment.start) - BOX_SIZE / 2 - 18;
-      const endX = this.boxX(snapshot.segment.end) + BOX_SIZE / 2 + 18;
+      const startX = this.boxX(snapshot.segment.start) - BOX_SIZE / 2 - 24;
+      const endX = this.boxX(snapshot.segment.end) + BOX_SIZE / 2 + 24;
       context.save();
       const gradient = context.createLinearGradient(startX, 0, endX, 0);
-      gradient.addColorStop(0, "rgba(48,230,242,.03)");
-      gradient.addColorStop(0.5, "rgba(48,230,242,.1)");
-      gradient.addColorStop(1, "rgba(48,230,242,.03)");
+      gradient.addColorStop(0, "rgba(48,230,242,.08)");
+      gradient.addColorStop(0.5, "rgba(48,230,242,.2)");
+      gradient.addColorStop(1, "rgba(48,230,242,.08)");
       context.fillStyle = gradient;
-      context.fillRect(startX, 198, endX - startX, 330);
-      context.strokeStyle = "rgba(48,230,242,.42)";
+      roundedRect(context, startX, 188, endX - startX, 350, 12);
+      context.fill();
+
+      context.shadowColor = COLORS.cyan;
+      context.shadowBlur = 15;
+      context.strokeStyle = "rgba(48,230,242,.86)";
       context.lineWidth = 3;
-      context.setLineDash([10, 8]);
-      context.beginPath();
-      context.moveTo(startX, 510);
-      context.lineTo(endX, 510);
+      roundedRect(context, startX, 188, endX - startX, 350, 12);
       context.stroke();
-      context.setLineDash([]);
+      context.shadowBlur = 0;
+
       context.fillStyle = COLORS.cyan;
-      context.font = "700 13px Bahnschrift, Segoe UI";
+      context.fillRect(startX - 3, 226, 6, 264);
+      context.fillRect(endX - 3, 226, 6, 264);
+      this._drawZoneLabel(
+        (startX + endX) / 2,
+        207,
+        `ZONA ATIVA  •  POSIÇÕES ${snapshot.segment.start + 1}–${snapshot.segment.end + 1}`,
+        COLORS.cyan,
+      );
+      context.restore();
+    }
+
+    _drawLockedZones(snapshot) {
+      const context = this.context;
+      const groups = [];
+      let currentGroup = null;
+
+      snapshot.values.forEach((_, index) => {
+        const inActiveSegment = index >= snapshot.segment.start && index <= snapshot.segment.end;
+        const locked = !inActiveSegment && !snapshot.resolved.has(index);
+        if (locked) {
+          if (!currentGroup) currentGroup = { start: index, end: index };
+          else currentGroup.end = index;
+        } else if (currentGroup) {
+          groups.push(currentGroup);
+          currentGroup = null;
+        }
+      });
+      if (currentGroup) groups.push(currentGroup);
+
+      groups.forEach((group) => {
+        const startX = this.boxX(group.start) - BOX_SIZE / 2 - 24;
+        const endX = this.boxX(group.end) + BOX_SIZE / 2 + 24;
+        const width = endX - startX;
+        context.save();
+        roundedRect(context, startX, 188, width, 350, 12);
+        context.clip();
+        context.fillStyle = "rgba(1,10,14,.68)";
+        context.fillRect(startX, 188, width, 350);
+        context.strokeStyle = "rgba(116,145,151,.16)";
+        context.lineWidth = 8;
+        for (let x = startX - 360; x < endX + 360; x += 34) {
+          context.beginPath();
+          context.moveTo(x, 538);
+          context.lineTo(x + 270, 188);
+          context.stroke();
+        }
+        context.restore();
+
+        context.save();
+        context.strokeStyle = "rgba(116,145,151,.55)";
+        context.lineWidth = 2;
+        context.setLineDash([8, 7]);
+        roundedRect(context, startX, 188, width, 350, 12);
+        context.stroke();
+        context.setLineDash([]);
+        this._drawZoneLabel(
+          (startX + endX) / 2,
+          207,
+          group.start === group.end ? "POSIÇÃO BLOQUEADA" : "ÁREA BLOQUEADA",
+          "#78949a",
+          true,
+        );
+        context.restore();
+      });
+    }
+
+    _drawZoneLabel(x, y, text, color, locked = false) {
+      const context = this.context;
+      context.save();
+      context.font = "900 12px Bahnschrift, Segoe UI";
+      const iconSpace = locked ? 19 : 0;
+      const width = context.measureText(text).width + 28 + iconSpace;
+      context.fillStyle = locked ? "rgba(5,18,23,.96)" : "rgba(4,31,38,.96)";
+      context.strokeStyle = color;
+      context.lineWidth = 1.5;
+      roundedRect(context, x - width / 2, y - 14, width, 28, 6);
+      context.fill();
+      context.stroke();
+      context.fillStyle = color;
       context.textAlign = "center";
-      context.fillText(`TRECHO ATIVO ${snapshot.segment.start + 1}–${snapshot.segment.end + 1}`, (startX + endX) / 2, 538);
+      context.textBaseline = "middle";
+      context.fillText(text, x + iconSpace / 2, y + 0.5);
+      if (locked) this._drawPadlock(x - width / 2 + 17, y, color, 0.62);
       context.restore();
     }
 
@@ -204,34 +326,106 @@
     _drawBoxes(frame, now) {
       const snapshot = frame.snapshot;
       snapshot.values.forEach((value, index) => {
-        let x = this.boxX(index);
-        let y = BOX_Y;
-        let swapping = false;
-
-        if (frame.swapAnimation) {
-          const { a, b, progress } = frame.swapAnimation;
-          const eased = easeInOutCubic(progress);
-          if (index === a) {
-            x = lerp(this.boxX(a), this.boxX(b), eased);
-            y -= Math.sin(progress * Math.PI) * 86;
-            swapping = true;
-          } else if (index === b) {
-            x = lerp(this.boxX(b), this.boxX(a), eased);
-            y -= Math.sin(progress * Math.PI) * 54;
-            swapping = true;
-          }
-        }
+        const isInExchange = frame.manualSwap
+          && (index === frame.manualSwap.a || index === frame.manualSwap.b);
+        const isBeingCarried = !frame.manualSwap && snapshot.selected === index;
+        if (isInExchange || isBeingCarried) return;
 
         this._drawBox({
-          x,
-          y,
+          x: this.boxX(index),
+          y: BOX_Y,
           value,
           index,
           snapshot,
           reachable: frame.nearbyIndex === index,
-          swapping,
+          swapping: false,
           now,
         });
+      });
+    }
+
+    _drawManualSwap(frame, now) {
+      const { snapshot, manualSwap } = frame;
+      const { a, b, phase } = manualSwap;
+      const progress = easeInOutCubic(manualSwap.phaseProgress);
+      const xA = this.boxX(a);
+      const xB = this.boxX(b);
+      const heldY = frame.robot.y - 124;
+      const robot = { ...frame.robot };
+      const boxes = [];
+      let carrying = false;
+
+      if (a === b) {
+        const lift = Math.sin(progress * Math.PI);
+        boxes.push({
+          value: snapshot.values[a],
+          index: a,
+          x: lerp(xA, robot.x, lift),
+          y: lerp(BOX_Y, heldY, lift),
+        });
+        carrying = lift > 0.35;
+      } else {
+        const valueA = snapshot.values[a];
+        const valueB = snapshot.values[b];
+
+        if (phase === "handoff" && manualSwap.phaseProgress < 0.5) {
+          const handoffProgress = easeInOutCubic(manualSwap.phaseProgress / 0.5);
+          const arcDirection = xB > WIDTH / 2 ? -1 : 1;
+          boxes.push({
+            value: valueA,
+            index: a,
+            x: lerp(robot.x, xB, handoffProgress)
+              + Math.sin(handoffProgress * Math.PI) * 14 * arcDirection,
+            y: lerp(heldY, BOX_Y, handoffProgress),
+          });
+          boxes.push({ value: valueB, index: b, x: xB, y: BOX_Y });
+          carrying = true;
+        } else if (phase === "handoff") {
+          const handoffProgress = easeInOutCubic((manualSwap.phaseProgress - 0.5) / 0.5);
+          const arcDirection = xB > WIDTH / 2 ? 1 : -1;
+          boxes.push({ value: valueA, index: a, x: xB, y: BOX_Y });
+          boxes.push({
+            value: valueB,
+            index: b,
+            x: lerp(xB, robot.x, handoffProgress)
+              + Math.sin(handoffProgress * Math.PI) * 14 * arcDirection,
+            y: lerp(BOX_Y, heldY, handoffProgress),
+          });
+          carrying = true;
+        } else if (phase === "carry-back") {
+          boxes.push({ value: valueA, index: a, x: xB, y: BOX_Y });
+          boxes.push({ value: valueB, index: b, x: robot.x, y: heldY });
+          carrying = true;
+        } else if (phase === "placing") {
+          boxes.push({ value: valueA, index: a, x: xB, y: BOX_Y });
+          boxes.push({
+            value: valueB,
+            index: b,
+            x: lerp(robot.x, xA, progress),
+            y: lerp(heldY, BOX_Y, progress),
+          });
+          carrying = progress < 0.7;
+        }
+      }
+
+      this._drawRobot(robot, now, this._isNearbyActionable(frame), carrying);
+      boxes.forEach((box) => this._drawLooseBox({ ...box, snapshot, now }));
+      if (carrying) {
+        const heldBox = boxes.find((box) => Math.abs(box.y - heldY) < 70 && Math.abs(box.x - robot.x) < 70);
+        if (heldBox) this._drawGripHands(heldBox.x, heldBox.y);
+      }
+    }
+
+    _drawLooseBox({ x, y, value, index, snapshot, now }) {
+      this._drawBox({
+        x,
+        y,
+        value,
+        index,
+        snapshot,
+        reachable: false,
+        swapping: true,
+        now,
       });
     }
 
@@ -242,15 +436,17 @@
         && index >= snapshot.segment.start
         && index <= snapshot.segment.end;
       const isPivot = snapshot.pivotIndex === index;
-      const isI = snapshot.i === index && snapshot.state !== GameState.VICTORY;
-      const isJ = snapshot.j === index && snapshot.state !== GameState.VICTORY;
       const selected = snapshot.selected === index;
       const resolved = snapshot.resolved.has(index);
+      const locked = !inSegment && !resolved && snapshot.state !== GameState.VICTORY;
       const bob = selected ? Math.sin(now / 115) * 4 - 10 : 0;
       y += bob;
 
       context.save();
-      if (!inSegment && !resolved && snapshot.state !== GameState.VICTORY) context.globalAlpha = 0.46;
+      if (locked) {
+        context.globalAlpha = 0.24;
+        context.filter = "grayscale(75%)";
+      }
       context.shadowBlur = 0;
       if (resolved) {
         context.shadowColor = COLORS.green;
@@ -294,7 +490,7 @@
       context.textBaseline = "middle";
       context.fillText(value, x, y + 1);
 
-      if (reachable && !swapping) {
+      if (reachable && !swapping && !locked) {
         context.strokeStyle = "rgba(255,255,255,.86)";
         context.lineWidth = 3;
         context.setLineDash([5, 5]);
@@ -307,6 +503,48 @@
       if (resolved) this._drawTag(x, y + half + 19, "FIXADO", COLORS.green);
       if (selected) this._drawTag(x, y + half + 20, "SELECIONADA", COLORS.ink);
       context.restore();
+      if (locked) this._drawLockedBoxBadge(x, y);
+    }
+
+    _drawLockedBoxBadge(x, y) {
+      const context = this.context;
+      context.save();
+      context.fillStyle = "rgba(3,15,19,.9)";
+      context.strokeStyle = "#718b91";
+      context.lineWidth = 2;
+      context.beginPath();
+      context.arc(x + 33, y - 34, 17, 0, Math.PI * 2);
+      context.fill();
+      context.stroke();
+      this._drawPadlock(x + 33, y - 34, "#9aafb3", 0.72);
+      context.restore();
+    }
+
+    _drawPadlock(x, y, color, scale = 1) {
+      const context = this.context;
+      context.save();
+      context.translate(x, y);
+      context.scale(scale, scale);
+      context.strokeStyle = color;
+      context.fillStyle = color;
+      context.lineWidth = 3;
+      context.beginPath();
+      context.arc(0, -3, 7, Math.PI, 0);
+      context.stroke();
+      roundedRect(context, -9, -3, 18, 14, 3);
+      context.fill();
+      context.fillStyle = "#0a1b20";
+      context.beginPath();
+      context.arc(0, 3, 2, 0, Math.PI * 2);
+      context.fill();
+      context.restore();
+    }
+
+    _isNearbyActionable(frame) {
+      const index = frame.nearbyIndex;
+      if (index === null || !frame.snapshot.segment) return false;
+      if (frame.manualSwap?.phase === "carry-back") return index === frame.manualSwap.a;
+      return index >= frame.snapshot.segment.start && index <= frame.snapshot.segment.end;
     }
 
     _drawTag(x, y, text, color) {
@@ -366,7 +604,7 @@
       context.restore();
     }
 
-    _drawRobot(robot, now, canInteract) {
+    _drawRobot(robot, now, canInteract, carrying = false) {
       const context = this.context;
       const walking = robot.moving;
       const step = walking ? Math.sin(now / 90) * 8 : 0;
@@ -421,8 +659,15 @@
       context.strokeStyle = "#7799a1";
       context.lineWidth = 8;
       context.beginPath();
-      context.moveTo(robot.facing > 0 ? 32 : -32, 2);
-      context.lineTo(robot.facing > 0 ? 54 : -54, 18 + step / 2);
+      if (carrying) {
+        context.moveTo(-29, 0);
+        context.lineTo(-42, -67);
+        context.moveTo(29, 0);
+        context.lineTo(42, -67);
+      } else {
+        context.moveTo(robot.facing > 0 ? 32 : -32, 2);
+        context.lineTo(robot.facing > 0 ? 54 : -54, 18 + step / 2);
+      }
       context.stroke();
       context.restore();
 
@@ -431,15 +676,32 @@
       }
     }
 
+    _drawGripHands(x, boxY) {
+      const context = this.context;
+      const half = BOX_SIZE / 2;
+      context.save();
+      context.fillStyle = "#9ec3ca";
+      context.strokeStyle = "#17333b";
+      context.lineWidth = 3;
+      context.beginPath();
+      context.arc(x - half + 5, boxY + half - 2, 8, 0, Math.PI * 2);
+      context.arc(x + half - 5, boxY + half - 2, 8, 0, Math.PI * 2);
+      context.fill();
+      context.stroke();
+      context.restore();
+    }
+
     _drawComparison(snapshot, now) {
-      if (!snapshot.comparison || now - snapshot.comparison.timestamp > 1500) return;
+      if (!snapshot.comparison || now - snapshot.comparison.timestamp > COMPARISON_DURATION) return;
       const context = this.context;
       const x = snapshot.comparison.index === null
         ? WIDTH / 2
         : this.boxX(snapshot.comparison.index);
       const age = now - snapshot.comparison.timestamp;
       context.save();
-      context.globalAlpha = clamp(1 - Math.max(0, age - 1100) / 400, 0, 1);
+      const fadeDuration = 700;
+      const fadeStart = COMPARISON_DURATION - fadeDuration;
+      context.globalAlpha = clamp(1 - Math.max(0, age - fadeStart) / fadeDuration, 0, 1);
       context.fillStyle = snapshot.comparison.correct ? COLORS.green : COLORS.red;
       context.font = "900 19px Bahnschrift, Segoe UI";
       context.textAlign = "center";

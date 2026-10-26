@@ -41,8 +41,16 @@
 
         <aside class="stats-panel" aria-label="Estado da partida">
           <div class="stat">
+            <span class="stat__label">FASE</span>
+            <strong id="phase-name" class="stat__value">1 · MÉDIO</strong>
+          </div>
+          <div class="stat">
             <span class="stat__label">PIVÔ</span>
             <strong id="pivot-value" class="stat__value stat__value--pivot">—</strong>
+          </div>
+          <div class="stat">
+            <span class="stat__label">ESTRATÉGIA</span>
+            <strong id="pivot-strategy" class="stat__value">INÍCIO</strong>
           </div>
           <div class="stat">
             <span class="stat__label">TRECHO</span>
@@ -78,7 +86,62 @@
       </section>
     </main>
 
-    <div id="tutorial-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
+    <div id="start-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="start-title">
+      <div class="modal__backdrop"></div>
+      <section class="modal__card modal__card--start">
+        <div class="modal__accent"></div>
+        <p class="eyebrow">CONFIGURAÇÃO DA LINHA</p>
+        <h2 id="start-title">Escolha o pivô</h2>
+        <p class="modal__text modal__text--start">
+          Defina qual extremidade de cada trecho fornecerá o pivô durante toda a missão.
+        </p>
+
+        <div class="pivot-options" role="group" aria-label="Posição do pivô">
+          <button class="pivot-option is-selected" type="button" data-pivot-strategy="FIRST" aria-pressed="true">
+            <span class="pivot-option__diagram" aria-hidden="true">
+              <i class="is-pivot">8</i><i>3</i><i>12</i><i>5</i>
+            </span>
+            <strong>No início</strong>
+            <small>A primeira caixa do trecho será o pivô.</small>
+          </button>
+          <button class="pivot-option" type="button" data-pivot-strategy="LAST" aria-pressed="false">
+            <span class="pivot-option__diagram" aria-hidden="true">
+              <i>8</i><i>3</i><i>12</i><i class="is-pivot">5</i>
+            </span>
+            <strong>No final</strong>
+            <small>A última caixa do trecho será o pivô.</small>
+          </button>
+        </div>
+
+        <p class="menu-section-label">ESCOLHA A FASE</p>
+        <div class="phase-options" role="group" aria-label="Caso de execução do Quick Sort">
+          <button class="phase-option is-selected" type="button" data-phase-id="AVERAGE" aria-pressed="true">
+            <span class="phase-option__number">01</span>
+            <strong>Caso médio</strong>
+            <small>Partições irregulares</small>
+            <em>O(n log n) esperado</em>
+          </button>
+          <button class="phase-option" type="button" data-phase-id="BEST" aria-pressed="false">
+            <span class="phase-option__number">02</span>
+            <strong>Melhor caso</strong>
+            <small>Partições equilibradas</small>
+            <em>O(n log n)</em>
+          </button>
+          <button class="phase-option" type="button" data-phase-id="WORST" aria-pressed="false">
+            <span class="phase-option__number">03</span>
+            <strong>Pior caso</strong>
+            <small>Partições n−1</small>
+            <em>O(n²)</em>
+          </button>
+        </div>
+
+        <button id="start-mission-button" class="primary-button primary-button--wide" type="button">
+          Continuar para o treinamento
+        </button>
+      </section>
+    </div>
+
+    <div id="tutorial-modal" class="modal modal--hidden" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
       <div class="modal__backdrop"></div>
       <section class="modal__card modal__card--tutorial">
         <div class="modal__accent"></div>
@@ -103,15 +166,22 @@
         <div class="victory-badge" aria-hidden="true">✓</div>
         <p class="eyebrow">PROTOCOLO CONCLUÍDO</p>
         <h2 id="victory-title">Linha reativada!</h2>
+        <p id="victory-phase" class="victory-phase"></p>
         <p class="modal__text">Você posicionou cada pivô e ordenou todos os subarrays.</p>
+        <p id="victory-lesson" class="victory-lesson"></p>
         <p id="victory-array" class="victory-array"></p>
         <div class="victory-stats">
           <span>Pontuação <strong id="victory-score">0</strong></span>
           <span>Erros <strong id="victory-errors">0</strong></span>
         </div>
-        <button id="play-again-button" class="primary-button primary-button--wide" type="button">
-          Jogar novamente
-        </button>
+        <div class="victory-actions">
+          <button id="next-phase-button" class="primary-button primary-button--wide" type="button">
+            Próxima fase
+          </button>
+          <button id="play-again-button" class="secondary-button primary-button--wide" type="button">
+            Voltar ao menu
+          </button>
+        </div>
       </section>
     </div>
 

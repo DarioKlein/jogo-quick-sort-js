@@ -10,7 +10,7 @@ require(path.join(__dirname, "..", "js", "constants.js"));
 require(path.join(__dirname, "..", "js", "utils.js"));
 require(path.join(__dirname, "..", "js", "quick-sort-engine.js"));
 
-const { GameState } = global.SortFactory.Constants;
+const { GameState, PivotStrategy, PhaseId, PHASES } = global.SortFactory.Constants;
 const { QuickSortEngine } = global.SortFactory;
 
 function completePhase(engine) {
@@ -29,9 +29,10 @@ function completePhase(engine) {
       break;
     }
     case GameState.PLACE_PIVOT: {
+      const pivotTargetIndex = engine.getSnapshot().pivotTargetIndex;
       let request = engine.selectForSwap(engine.pivotIndex);
       if (request.type !== "swap-requested") {
-        request = engine.selectForSwap(engine.j);
+        request = engine.selectForSwap(pivotTargetIndex);
       }
       assert.equal(request.type, "swap-requested");
       engine.completeSwap(request.a, request.b);
@@ -42,8 +43,8 @@ function completePhase(engine) {
   }
 }
 
-function testCompleteGame() {
-  const engine = new QuickSortEngine();
+function testCompleteGame(pivotStrategy, initialValues = undefined) {
+  const engine = new QuickSortEngine(initialValues, pivotStrategy);
   let actions = 0;
 
   while (engine.state !== GameState.VICTORY && actions < 100) {
@@ -52,10 +53,11 @@ function testCompleteGame() {
   }
 
   assert.ok(actions < 100, "a partida deve terminar sem entrar em loop");
-  assert.deepEqual(engine.values, [1, 3, 5, 8, 10, 12]);
+  assert.deepEqual(engine.values, [...engine.initialValues].sort((a, b) => a - b));
   assert.equal(engine.resolved.size, engine.values.length);
   assert.equal(engine.errors, 0);
   assert.ok(engine.score > 1000);
+  return { actions, engine };
 }
 
 function testInvalidActionIsSafe() {
@@ -85,8 +87,43 @@ function testTwoElementSegment() {
   assert.equal(engine.resolved.size, 2);
 }
 
-testCompleteGame();
+function testPhaseConfiguration() {
+  const engine = new QuickSortEngine();
+  const bestPhase = PHASES.find((phase) => phase.id === PhaseId.BEST);
+  engine.inspect(engine.i);
+  engine.configure(bestPhase.values[PivotStrategy.LAST], PivotStrategy.LAST);
+
+  assert.deepEqual(engine.values, [...bestPhase.values[PivotStrategy.LAST]]);
+  assert.equal(engine.pivotStrategy, PivotStrategy.LAST);
+  assert.equal(engine.score, 1000);
+  assert.equal(engine.errors, 0);
+  assert.equal(engine.state, GameState.INSPECT_I);
+}
+
+testCompleteGame(PivotStrategy.FIRST);
+testCompleteGame(PivotStrategy.LAST);
+for (const pivotStrategy of Object.values(PivotStrategy)) {
+  const averagePhase = PHASES.find((phase) => phase.id === PhaseId.AVERAGE);
+  const bestPhase = PHASES.find((phase) => phase.id === PhaseId.BEST);
+  const worstPhase = PHASES.find((phase) => phase.id === PhaseId.WORST);
+  const averageResult = testCompleteGame(pivotStrategy, averagePhase.values[pivotStrategy]);
+  const bestResult = testCompleteGame(pivotStrategy, bestPhase.values[pivotStrategy]);
+  const worstResult = testCompleteGame(pivotStrategy, worstPhase.values[pivotStrategy]);
+
+  assert.ok(bestResult.actions < worstResult.actions, "o melhor caso deve exigir menos ações que o pior");
+  assert.ok(averageResult.actions < worstResult.actions, "o caso médio deve superar o pior caso");
+}
+[
+  [5, 4, 3, 2, 1],
+  [1, 2, 3, 4, 5],
+  [3, 1, 3, 2, 1],
+  [0, -4, 7, -1, 7],
+].forEach((values) => {
+  testCompleteGame(PivotStrategy.FIRST, values);
+  testCompleteGame(PivotStrategy.LAST, values);
+});
 testInvalidActionIsSafe();
 testTwoElementSegment();
+testPhaseConfiguration();
 
-console.log("✓ QuickSortEngine: fluxo completo, ações inválidas e subarray de 2 elementos");
+console.log("✓ QuickSortEngine: três fases, dois pivôs, ações inválidas e subarray de 2 elementos");
