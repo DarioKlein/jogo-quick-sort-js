@@ -57,12 +57,12 @@ O projeto será desenvolvido com:
 - **JavaScript puro** para toda a lógica do jogo;
 - **Canvas 2D** para personagem, cenário, caixas, ponteiros, animações e efeitos;
 - nenhuma dependência externa;
-- nenhuma instalação obrigatória;
-- nenhuma conexão com servidor.
+- **Node.js 18+** para servir o jogo dentro da rede local;
+- comunicação temporária em tempo real com APIs nativas de HTTP, `fetch` e Server-Sent Events.
 
-O projeto será entregue em uma pasta que poderá ser executada abrindo o arquivo `index.html` em um navegador moderno.
+O projeto será entregue em uma pasta e iniciado com `npm start`. O terminal exibirá o endereço local do jogo, o endereço do painel do apresentador e os endereços disponíveis na rede da sala.
 
-O progresso existirá apenas durante a sessão atual. Não haverá conta, banco de dados ou serviço online no MVP.
+O progresso existirá apenas durante a sessão atual. Não haverá conta, banco de dados ou serviço online: nomes, pontuações e partidas permanecerão somente na memória do processo e desaparecerão quando o servidor for encerrado.
 
 ---
 
@@ -793,7 +793,9 @@ O MVP será considerado concluído quando todos os itens abaixo estiverem funcio
 - Microsoft Edge recente;
 - Firefox recente;
 - diferentes tamanhos de janela;
-- execução direta por `index.html` sem servidor local.
+- jogo servido em `http://localhost:3000`;
+- painel local em `http://localhost:3000/dev`;
+- acesso por outro computador conectado à mesma rede da sala.
 
 ---
 
@@ -809,8 +811,9 @@ Não serão necessários nesta primeira versão:
 - inventário;
 - sistema de contas;
 - salvamento online;
-- ranking;
-- multiplayer;
+- autenticação do painel local;
+- persistência do ranking após encerrar o servidor;
+- partidas pela internet ou entre redes diferentes;
 - arte externa complexa;
 - suporte completo a dispositivos móveis;
 - publicação em loja ou servidor;

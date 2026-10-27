@@ -125,6 +125,50 @@ canvas:focus-visible {
   gap: 10px;
 }
 
+.topbar-actions {
+  align-items: center;
+}
+
+.player-chip {
+  display: grid;
+  grid-template-columns: 8px auto;
+  align-items: center;
+  column-gap: 7px;
+  min-width: 116px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(12, 46, 56, 0.72);
+  padding: 6px 10px;
+}
+
+.player-chip i {
+  grid-row: 1 / 3;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #58737a;
+  box-shadow: 0 0 9px currentColor;
+}
+
+.player-chip[data-connection="connecting"] i { background: var(--gold); }
+.player-chip[data-connection="online"] i { background: var(--green); }
+.player-chip[data-connection="error"] i { background: var(--red); }
+
+.player-chip span {
+  color: var(--muted);
+  font-size: 0.5rem;
+  font-weight: 850;
+  letter-spacing: 0.13em;
+}
+
+.player-chip strong {
+  overflow: hidden;
+  max-width: 130px;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .hud-button,
 .primary-button,
 .secondary-button,
@@ -164,6 +208,12 @@ canvas:focus-visible {
 
 .primary-button--wide {
   width: 100%;
+}
+
+.primary-button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+  transform: none;
 }
 
 .secondary-button:disabled {
@@ -414,6 +464,51 @@ kbd {
 .modal__text--start {
   min-height: 0;
   margin-bottom: 24px;
+}
+
+.player-name-field {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 5px;
+}
+
+.player-name-field span {
+  color: var(--muted);
+  font-size: 0.67rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+
+.player-name-field input {
+  width: 100%;
+  height: 46px;
+  border: 1px solid rgba(130, 220, 231, 0.28);
+  border-radius: 10px;
+  outline: none;
+  background: rgba(3, 20, 26, 0.76);
+  padding: 0 14px;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 750;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.player-name-field input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(48, 230, 242, 0.12);
+}
+
+.player-name-field input:read-only {
+  color: var(--green);
+  cursor: default;
+}
+
+.form-error {
+  min-height: 1.2em;
+  margin: 4px 0 10px;
+  color: #ffadb7;
+  font-size: 0.76rem;
+  font-weight: 700;
 }
 
 .pivot-options {
@@ -674,6 +769,15 @@ kbd {
     gap: 6px;
   }
 
+  .player-chip {
+    min-width: 100px;
+    padding-inline: 8px;
+  }
+
+  .player-chip strong {
+    max-width: 92px;
+  }
+
   .hud-button {
     padding-inline: 11px;
     font-size: 0.78rem;
@@ -714,6 +818,14 @@ kbd {
   .pivot-options,
   .phase-options {
     margin-bottom: 14px;
+  }
+
+  .player-name-field input {
+    height: 40px;
+  }
+
+  .form-error {
+    margin-bottom: 6px;
   }
 
   .pivot-option {

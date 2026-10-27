@@ -17,6 +17,10 @@
         status: document.querySelector("#status-message"),
         help: document.querySelector("#help-button"),
         restart: document.querySelector("#restart-button"),
+        playerChip: document.querySelector("#player-chip"),
+        playerDisplay: document.querySelector("#player-display"),
+        playerName: document.querySelector("#player-name"),
+        playerNameError: document.querySelector("#player-name-error"),
         start: document.querySelector("#start-modal"),
         startMission: document.querySelector("#start-mission-button"),
         pivotOptions: [...document.querySelectorAll("[data-pivot-strategy]")],
@@ -43,6 +47,7 @@
       this.selectedPivotStrategy = PivotStrategy.FIRST;
       this.selectedPhaseId = PhaseId.AVERAGE;
       this.currentPhase = PHASES[0];
+      this.playerName = "";
       this.statusTimer = null;
       this.onTutorialVisibilityChange = () => {};
       this.onRestart = () => {};
@@ -91,6 +96,38 @@
       this.elements.phaseName.textContent = `${phase.number} · ${phase.shortTitle}`;
     }
 
+    setPlayerName(name) {
+      this.playerName = name;
+      this.elements.playerDisplay.textContent = name.toUpperCase();
+      this.elements.playerName.value = name;
+      this.elements.playerName.readOnly = true;
+    }
+
+    setConnectionState(state) {
+      this.elements.playerChip.dataset.connection = state;
+      const labels = {
+        connecting: "CONECTANDO",
+        online: this.elements.playerName.value || "ONLINE",
+        error: "SEM CONEXÃO",
+        offline: "AGUARDANDO",
+      };
+      this.elements.playerDisplay.textContent = state === "online" && this.playerName
+        ? this.playerName.toUpperCase()
+        : labels[state] ?? labels.offline;
+    }
+
+    setStartPending(isPending) {
+      this.elements.startMission.disabled = isPending;
+      this.elements.startMission.textContent = isPending
+        ? "Entrando na sala…"
+        : "Continuar para o treinamento";
+    }
+
+    showStartError(message) {
+      this.elements.playerNameError.textContent = message;
+      if (message) this.elements.playerName.focus();
+    }
+
     showStatus(message, isError = false, duration = 4200) {
       window.clearTimeout(this.statusTimer);
       this.elements.status.textContent = message;
@@ -116,7 +153,12 @@
       this.elements.tutorial.classList.add("modal--hidden");
       this.elements.start.classList.remove("modal--hidden");
       this.onTutorialVisibilityChange(true);
-      window.setTimeout(() => this.elements.pivotOptions[0].focus(), 0);
+      window.setTimeout(
+        () => (this.elements.playerName.readOnly
+          ? this.elements.pivotOptions[0]
+          : this.elements.playerName).focus(),
+        0,
+      );
     }
 
     hideStartMenu() {
@@ -184,8 +226,20 @@
         option.addEventListener("click", () => this.selectPhase(option.dataset.phaseId));
       });
       this.elements.startMission.addEventListener("click", () => {
-        this.hideStartMenu();
-        this.onStart(this.selectedPivotStrategy, this.selectedPhaseId);
+        const playerName = this.elements.playerName.value.trim();
+        if (playerName.length < 2) {
+          this.showStartError("Informe um nome com pelo menos 2 caracteres.");
+          return;
+        }
+        this.showStartError("");
+        this.onStart(playerName, this.selectedPivotStrategy, this.selectedPhaseId);
+      });
+      this.elements.playerName.addEventListener("input", () => this.showStartError(""));
+      this.elements.playerName.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          this.elements.startMission.click();
+        }
       });
       this.elements.tutorialSkip.addEventListener("click", () => this.closeTutorial());
       this.elements.tutorialBack.addEventListener("click", () => {

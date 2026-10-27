@@ -22,6 +22,7 @@
       this.input = new namespace.InputController();
       this.ui = new namespace.UiController();
       this.renderer = new namespace.Renderer(this.canvas);
+      this.liveSession = new namespace.LiveSession();
       this.currentPhase = PHASES[0];
 
       this.robot = this._createRobot();
@@ -34,6 +35,7 @@
       this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
       this._bindEvents();
+      this.liveSession.onConnectionChange = (state) => this.ui.setConnectionState(state);
       this.engine.subscribe((snapshot) => this._handleStateChange(snapshot));
       this.ui.setPhase(this.currentPhase);
       this.ui.update(this.engine.getSnapshot());
@@ -67,7 +69,9 @@
         if (!isOpen) this.canvas.focus();
       };
       this.ui.onRestart = () => this.restart();
-      this.ui.onStart = (pivotStrategy, phaseId) => this._startPhase(phaseId, pivotStrategy, true);
+      this.ui.onStart = (playerName, pivotStrategy, phaseId) => {
+        this._joinAndStart(playerName, pivotStrategy, phaseId);
+      };
       this.ui.onPlayAgain = () => this._returnToStartMenu();
       this.ui.onNextPhase = () => {
         const nextPhase = this._getNextPhase();
@@ -134,6 +138,8 @@
         modalOpen: this.modalOpen || this.victoryShown,
         victory: snapshot.state === GameState.VICTORY,
       });
+
+      this._publishLiveState(time, snapshot, manualSwapForFrame);
 
       requestAnimationFrame(this._frame);
     }
@@ -272,6 +278,67 @@
 
     _createRobot() {
       return { x: BOX_START_X, y: 584, facing: 1, moving: false };
+    }
+
+    async _joinAndStart(playerName, pivotStrategy, phaseId) {
+      this.ui.setStartPending(true);
+      this.ui.showStartError("");
+      try {
+        const player = await this.liveSession.join(playerName);
+        this.ui.setPlayerName(player.name);
+        this.ui.hideStartMenu();
+        this._startPhase(phaseId, pivotStrategy, true);
+      } catch (error) {
+        this.ui.showStartError(
+          error.message || "Não foi possível conectar ao servidor local da sala.",
+        );
+      } finally {
+        this.ui.setStartPending(false);
+      }
+    }
+
+    _publishLiveState(time, snapshot, manualSwap) {
+      if (!this.liveSession.playerId) return;
+      let status = "jogando";
+      if (this.victoryShown || snapshot.state === GameState.VICTORY) {
+        status = "concluido";
+      } else if (this.ui.isTutorialOpen()) {
+        status = "tutorial";
+      } else if (this.modalOpen) {
+        status = "menu";
+      } else if (this.paused) {
+        status = "pausado";
+      }
+
+      const comparison = snapshot.comparison
+        ? {
+            ...snapshot.comparison,
+            timestamp: undefined,
+            age: Math.max(0, time - snapshot.comparison.timestamp),
+          }
+        : null;
+      this.liveSession.publish({
+        score: snapshot.score,
+        errors: snapshot.errors,
+        phaseId: this.currentPhase.id,
+        phaseNumber: this.currentPhase.number,
+        phaseTitle: this.currentPhase.title,
+        pivotStrategy: snapshot.pivotStrategy,
+        status,
+        gameState: {
+          snapshot: {
+            ...snapshot,
+            resolved: [...snapshot.resolved],
+            comparison,
+          },
+          robot: { ...this.robot },
+          nearbyIndex: this.nearbyIndex,
+          manualSwap,
+          paused: this.paused,
+          modalOpen: this.modalOpen || this.victoryShown,
+          victory: snapshot.state === GameState.VICTORY,
+        },
+      });
     }
 
     _startPhase(phaseId, pivotStrategy, showTutorial) {

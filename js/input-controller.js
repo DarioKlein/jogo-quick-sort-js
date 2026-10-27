@@ -56,6 +56,12 @@
       return codes.some((code) => this.keysDown.has(code));
     }
 
+    _isEditableTarget(target) {
+      if (!target || typeof target !== "object") return false;
+      const tagName = String(target.tagName ?? "").toUpperCase();
+      return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(tagName);
+    }
+
     _onKeyDown(event) {
       const controlledKeys = [
         "KeyW",
@@ -70,11 +76,11 @@
         "Space",
       ];
 
+      if (!this.enabled || this._isEditableTarget(event.target)) return;
+
       if (controlledKeys.includes(event.code)) {
         event.preventDefault();
       }
-
-      if (!this.enabled) return;
 
       if ((event.code === "KeyE" || event.code === "Space") && !event.repeat) {
         this.interactionQueued = true;
@@ -84,7 +90,10 @@
     }
 
     _onKeyUp(event) {
-      if (event.code.startsWith("Arrow") || event.code === "Space") {
+      const shouldPrevent = this.enabled
+        && !this._isEditableTarget(event.target)
+        && (event.code.startsWith("Arrow") || event.code === "Space");
+      if (shouldPrevent) {
         event.preventDefault();
       }
       this.keysDown.delete(event.code);

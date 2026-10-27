@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#071a22" />
+    <meta name="description" content="Painel local do apresentador do Sort Factory." />
+    <title>Sort Factory — Painel da Sala</title>
+    <link rel="stylesheet" href="dev.css" />
+  </head>
+  <body>
+    <header class="dev-header">
+      <div>
+        <p class="eyebrow">PROTOCOLO PIVÔ · CONTROLE LOCAL</p>
+        <h1>SALA <span>AO VIVO</span></h1>
+      </div>
+      <div class="server-state" id="server-state" data-state="connecting">
+        <i aria-hidden="true"></i>
+        <span>Conectando ao servidor…</span>
+      </div>
+    </header>
+
+    <main class="dev-layout">
+      <section class="ranking-panel" aria-labelledby="ranking-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">PLACAR DA TURMA</p>
+            <h2 id="ranking-title">Ranking</h2>
+          </div>
+          <strong id="player-count" class="counter">0 online</strong>
+        </div>
+        <ol id="ranking-list" class="ranking-list"></ol>
+        <div id="ranking-empty" class="empty-state">
+          <span aria-hidden="true">⌁</span>
+          <strong>Nenhum jogador conectado</strong>
+          <p>Abra o endereço do jogo nos computadores da sala.</p>
+        </div>
+      </section>
+
+      <section class="games-panel" aria-labelledby="games-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">SESSÕES TEMPORÁRIAS</p>
+            <h2 id="games-title">Jogos abertos</h2>
+          </div>
+          <button id="refresh-button" class="secondary-button" type="button">Atualizar</button>
+        </div>
+        <div id="games-grid" class="games-grid"></div>
+        <div id="games-empty" class="empty-state">
+          <span aria-hidden="true">□</span>
+          <strong>Aguardando a turma</strong>
+          <p>As partidas aparecem aqui assim que cada jogador informa o nome.</p>
+        </div>
+      </section>
+    </main>
+
+    <section id="spectator" class="spectator spectator--hidden" aria-labelledby="spectator-title">
+      <header class="spectator__header">
+        <div>
+          <p class="eyebrow">TRANSMISSÃO EM TEMPO REAL</p>
+          <h2 id="spectator-title">Assistindo <span id="spectator-name">—</span></h2>
+        </div>
+        <div class="spectator__meta">
+          <span>Fase <strong id="spectator-phase">—</strong></span>
+          <span>Pontos <strong id="spectator-score">—</strong></span>
+          <span>Erros <strong id="spectator-errors">—</strong></span>
+          <button id="close-spectator" class="secondary-button" type="button">Fechar transmissão</button>
+        </div>
+      </header>
+      <div class="spectator__stage">
+        <canvas id="spectator-canvas" width="1280" height="720">
+          Seu navegador precisa oferecer suporte ao Canvas 2D.
+        </canvas>
+        <div id="spectator-waiting" class="spectator__waiting">
+          Aguardando o jogador iniciar a missão…
+        </div>
+      </div>
+    </section>
+
+    <template id="ranking-item-template">
+      <li class="ranking-item">
+        <span class="ranking-item__position"></span>
+        <span class="ranking-item__name"></span>
+        <span class="ranking-item__phase"></span>
+        <strong class="ranking-item__score"></strong>
+      </li>
+    </template>
+
+    <template id="game-card-template">
+      <article class="game-card">
+        <div class="game-card__topline">
+          <span class="game-card__status"></span>
+          <span class="game-card__spectators"></span>
+        </div>
+        <h3 class="game-card__name"></h3>
+        <p class="game-card__phase"></p>
+        <dl class="game-card__stats">
+          <div><dt>Pontos</dt><dd class="game-card__score"></dd></div>
+          <div><dt>Erros</dt><dd class="game-card__errors"></dd></div>
+          <div><dt>Pivô</dt><dd class="game-card__pivot"></dd></div>
+        </dl>
+        <button class="watch-button" type="button">Assistir partida</button>
+      </article>
+    </template>
+
+    <script src="js/constants.js" defer></script>
+    <script src="js/utils.js" defer></script>
+    <script src="js/renderer.js" defer></script>
+    <script src="js/spectator-buffer.js" defer></script>
+    <script src="js/dev-dashboard.js" defer></script>
+  </body>
+</html>

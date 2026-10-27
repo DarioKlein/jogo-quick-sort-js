@@ -4,13 +4,25 @@ Jogo educativo 2D no qual o jogador executa cada etapa do Quick Sort caminhando 
 
 ## Como executar
 
-Não há instalação, dependências ou servidor.
+Não há dependências externas nem banco de dados. O servidor local usa apenas recursos nativos do
+Node.js e mantém todas as sessões na memória.
 
-1. Abra `index.html` em um navegador moderno.
-2. Escolha se o pivô de cada trecho ficará no início ou no final.
-3. Escolha uma das três fases.
-4. Avance ou pule o tutorial.
-5. Siga o objetivo exibido no painel superior.
+1. Instale o Node.js 18 ou superior.
+2. No terminal, execute `npm start`.
+3. Abra o endereço do jogo mostrado no terminal.
+4. Compartilhe o endereço `Rede da sala` com os alunos conectados ao mesmo Wi-Fi.
+5. Abra `/dev` no seu computador para acompanhar o ranking e assistir às partidas.
+
+Exemplo:
+
+```text
+Jogo local:   http://localhost:3000
+Painel dev:   http://localhost:3000/dev
+Rede da sala: http://192.168.0.15:3000
+```
+
+Ao encerrar o servidor, nomes, pontuações e partidas desaparecem. Nenhuma informação é gravada em
+arquivo ou banco de dados.
 
 Chrome/Chromium, Edge e Firefox recentes são suportados.
 
@@ -52,12 +64,15 @@ Durante uma troca, a primeira caixa selecionada fica nas mãos do robô. Ao cheg
 
 ## Organização do código
 
-O projeto usa módulos no padrão IIFE, compartilhados pelo namespace `window.SortFactory`. Scripts clássicos foram escolhidos deliberadamente para que o jogo continue funcionando ao abrir `index.html` por `file://`, sem servidor local.
+O projeto usa módulos no padrão IIFE, compartilhados pelo namespace `window.SortFactory`. Scripts clássicos mantêm o cliente sem etapa de build; o servidor local é necessário apenas para conectar os jogadores ao painel da sala.
 
 ```text
 .
 ├── index.html
+├── dev.html                  # ranking e modo espectador do apresentador
 ├── style.css
+├── dev.css
+├── server.js                 # servidor HTTP e sessões mantidas apenas em memória
 ├── js/
 │   ├── constants.js          # configuração imutável e conteúdo do tutorial
 │   ├── utils.js              # funções puras compartilhadas
@@ -65,10 +80,14 @@ O projeto usa módulos no padrão IIFE, compartilhados pelo namespace `window.So
 │   ├── input-controller.js   # teclado e normalização de movimento
 │   ├── ui-controller.js      # HUD, tutorial e modal de vitória
 │   ├── renderer.js           # cenário e animações no Canvas 2D
+│   ├── live-session.js       # envio temporário do estado do jogador
+│   ├── spectator-buffer.js   # fila e interpolação suave da transmissão
+│   ├── dev-dashboard.js      # ranking e reprodução das partidas ao vivo
 │   └── game.js               # ciclo do jogo e coordenação dos módulos
 └── tests/
     ├── quick-sort-engine.test.js
-    └── renderer-smoke.test.js
+    ├── renderer-smoke.test.js
+    └── server.test.js
 ```
 
 A lógica do algoritmo não depende do Canvas ou do DOM. Isso permite testá-la isoladamente e impede que erros de interface corrompam o vetor.
@@ -97,4 +116,5 @@ Os testes percorrem automaticamente as três fases com as duas estratégias de p
 - três fases fixas com seis caixas cada;
 - controles por teclado, sem interface de toque dedicada;
 - progresso mantido apenas durante a sessão;
+- painel do apresentador sem autenticação, destinado somente à rede local da apresentação;
 - áudio não incluído nesta versão.

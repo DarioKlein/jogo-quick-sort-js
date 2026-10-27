@@ -35,6 +35,11 @@
         </section>
 
         <div class="topbar-actions">
+          <div id="player-chip" class="player-chip" data-connection="offline">
+            <i aria-hidden="true"></i>
+            <span>OPERADOR</span>
+            <strong id="player-display">AGUARDANDO</strong>
+          </div>
           <button id="help-button" class="hud-button" type="button">Como jogar</button>
           <button id="restart-button" class="hud-button hud-button--danger" type="button">
             Reiniciar
@@ -101,11 +106,27 @@
       <section class="modal__card modal__card--start">
         <div class="modal__accent"></div>
         <p class="eyebrow">CONFIGURAÇÃO DA LINHA</p>
-        <h2 id="start-title">Escolha o pivô</h2>
+        <h2 id="start-title">Prepare seu operador</h2>
         <p class="modal__text modal__text--start">
-          Defina qual extremidade de cada trecho fornecerá o pivô durante toda a missão.
+          Informe seu nome e configure a missão. Seu progresso aparecerá no painel da sala.
         </p>
 
+        <label class="player-name-field" for="player-name">
+          <span>NOME DO JOGADOR</span>
+          <input
+            id="player-name"
+            name="player-name"
+            type="text"
+            minlength="2"
+            maxlength="24"
+            autocomplete="off"
+            placeholder="Ex.: Gabriel"
+            required
+          />
+        </label>
+        <p id="player-name-error" class="form-error" role="alert"></p>
+
+        <p class="menu-section-label">ESCOLHA O PIVÔ</p>
         <div class="pivot-options" role="group" aria-label="Posição do pivô">
           <button class="pivot-option is-selected" type="button" data-pivot-strategy="FIRST" aria-pressed="true">
             <span class="pivot-option__diagram" aria-hidden="true">
@@ -201,6 +222,7 @@
     <script src="js/input-controller.js" defer></script>
     <script src="js/ui-controller.js" defer></script>
     <script src="js/renderer.js" defer></script>
+    <script src="js/live-session.js" defer></script>
     <script src="js/game.js" defer></script>
   </body>
 </html>
