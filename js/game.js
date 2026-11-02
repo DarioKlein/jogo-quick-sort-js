@@ -10,10 +10,15 @@
     INTERACTION_DISTANCE,
     HANDOFF_DURATION,
     PLACE_DURATION,
+    INITIAL_SCORE,
     GameState,
+    PivotStrategy,
     PHASES,
   } = namespace.Constants;
   const { clamp } = namespace.Utils;
+  const { calculateRunStats } = namespace.RunScoring;
+
+  const PHASE_TRANSITION_MS = 1100;
 
   class SortFactoryGame {
     constructor() {
@@ -31,14 +36,23 @@
       this.paused = false;
       this.modalOpen = true;
       this.victoryShown = false;
+      this.phaseCommitted = false;
+      this.runCompleted = false;
+      this.runStartedAt = null;
+      this.runFinishedAt = null;
+      this.completedScoreDelta = 0;
+      this.completedErrors = 0;
+      this.runSerial = 0;
+      this.phaseTransitionTimer = null;
       this.lastFrameTime = performance.now();
+      this.lastHudUpdate = Number.NEGATIVE_INFINITY;
       this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
       this._bindEvents();
       this.liveSession.onConnectionChange = (state) => this.ui.setConnectionState(state);
       this.engine.subscribe((snapshot) => this._handleStateChange(snapshot));
       this.ui.setPhase(this.currentPhase);
-      this.ui.update(this.engine.getSnapshot());
+      this.ui.update(this.engine.getSnapshot(), this._getRunStats(this.engine.getSnapshot()));
       this.input.enabled = false;
       this.canvas.setAttribute("aria-describedby", "objective");
 
@@ -47,18 +61,9 @@
     }
 
     restart() {
-      this.manualSwap = null;
-      this.renderer.resetEffects();
-      this.robot = this._createRobot();
-      this.nearbyIndex = null;
-      this.paused = false;
-      this.victoryShown = false;
-      this.ui.hideVictory();
-      this.engine.reset();
-      this.input.clear();
-      this.input.enabled = !this.modalOpen;
-      this.ui.showStatus("Linha reiniciada. O vetor voltou ao estado inicial.");
-      this.canvas.focus();
+      if (!this.liveSession.playerId) return;
+      this._beginRun(false);
+      this.ui.showStatus("Nova run iniciada. Pontuação, tempo e erros foram reiniciados.");
     }
 
     _bindEvents() {
@@ -66,17 +71,14 @@
         this.modalOpen = isOpen;
         this.input.enabled = !isOpen && !this.victoryShown;
         this.input.clear();
-        if (!isOpen) this.canvas.focus();
+        if (!isOpen) {
+          this._ensureRunStarted();
+          this.canvas.focus();
+        }
       };
       this.ui.onRestart = () => this.restart();
-      this.ui.onStart = (playerName, pivotStrategy, phaseId) => {
-        this._joinAndStart(playerName, pivotStrategy, phaseId);
-      };
-      this.ui.onPlayAgain = () => this._returnToStartMenu();
-      this.ui.onNextPhase = () => {
-        const nextPhase = this._getNextPhase();
-        if (nextPhase) this._startPhase(nextPhase.id, this.engine.pivotStrategy, false);
-      };
+      this.ui.onStart = (playerName) => this._joinAndStart(playerName);
+      this.ui.onPlayAgain = () => this._beginRun(false);
 
       window.addEventListener("blur", () => {
         if (!this.modalOpen && !this.victoryShown) this.paused = true;
@@ -96,14 +98,33 @@
     }
 
     _handleStateChange(snapshot) {
-      this.ui.update(snapshot);
-      if (snapshot.state === GameState.VICTORY && !this.victoryShown) {
-        this.victoryShown = true;
-        this.input.enabled = false;
-        this.renderer.celebrate();
-        const nextPhase = this._getNextPhase();
-        window.setTimeout(() => this.ui.showVictory(snapshot, this.currentPhase, nextPhase), 900);
+      this.ui.update(snapshot, this._getRunStats(snapshot));
+      if (snapshot.state !== GameState.VICTORY || this.victoryShown) return;
+
+      this.victoryShown = true;
+      this.input.enabled = false;
+      this.phaseCommitted = true;
+      this.completedScoreDelta += snapshot.score - INITIAL_SCORE;
+      this.completedErrors += snapshot.errors;
+      this.renderer.celebrate();
+
+      const nextPhase = this._getNextPhase();
+      if (nextPhase) {
+        this.ui.showStatus(
+          `Fase ${this.currentPhase.number} concluída! Preparando ${nextPhase.title.toLowerCase()}…`,
+          false,
+          PHASE_TRANSITION_MS,
+        );
+        this.phaseTransitionTimer = window.setTimeout(() => {
+          this._startPhase(nextPhase.id, false);
+        }, PHASE_TRANSITION_MS);
+        return;
       }
+
+      this.runFinishedAt = performance.now();
+      this.runCompleted = true;
+      this.modalOpen = true;
+      this._finishRun(snapshot, this.runSerial);
     }
 
     _frame(time) {
@@ -115,6 +136,12 @@
       }
 
       const snapshot = this.engine.getSnapshot();
+      const run = this._getRunStats(snapshot, time);
+      if (time - this.lastHudUpdate >= 200) {
+        this.lastHudUpdate = time;
+        this.ui.updateRunStats(run);
+      }
+
       const manualSwapForFrame = this.manualSwap
         ? {
             ...this.manualSwap,
@@ -139,8 +166,7 @@
         victory: snapshot.state === GameState.VICTORY,
       });
 
-      this._publishLiveState(time, snapshot, manualSwapForFrame);
-
+      this._publishLiveState(time, snapshot, manualSwapForFrame, run);
       requestAnimationFrame(this._frame);
     }
 
@@ -156,11 +182,8 @@
       this.nearbyIndex = this._findNearbyBox();
 
       if (this.input.consumeInteraction()) {
-        if (this.manualSwap?.phase === "carry-back") {
-          this._placeDisplacedBox();
-        } else {
-          this._interact();
-        }
+        if (this.manualSwap?.phase === "carry-back") this._placeDisplacedBox();
+        else this._interact();
       }
     }
 
@@ -176,19 +199,14 @@
     _findNearbyBox() {
       let nearest = null;
       let nearestDistance = Number.POSITIVE_INFINITY;
-      const values = this.engine.values;
-
-      values.forEach((_, index) => {
+      this.engine.values.forEach((_, index) => {
         const x = BOX_START_X + BOX_GAP * index;
-        const dx = this.robot.x - x;
-        const dy = this.robot.y - INTERACTION_Y;
-        const distance = Math.hypot(dx, dy * 0.7);
+        const distance = Math.hypot(this.robot.x - x, (this.robot.y - INTERACTION_Y) * 0.7);
         if (distance < INTERACTION_DISTANCE && distance < nearestDistance) {
           nearest = index;
           nearestDistance = distance;
         }
       });
-
       return nearest;
     }
 
@@ -209,14 +227,10 @@
         this.ui.showStatus(result.message, true);
         return;
       }
-
-      if (result.type === "inspection" || result.type === "selected" || result.type === "deselected") {
+      if (["inspection", "selected", "deselected"].includes(result.type)) {
         this.ui.showStatus(this.engine.message);
       }
-
-      if (result.type === "swap-requested") {
-        this._beginManualSwap(result);
-      }
+      if (result.type === "swap-requested") this._beginManualSwap(result);
     }
 
     _beginManualSwap({ a, b, pivot }) {
@@ -280,35 +294,88 @@
       return { x: BOX_START_X, y: 584, facing: 1, moving: false };
     }
 
-    async _joinAndStart(playerName, pivotStrategy, phaseId) {
+    async _joinAndStart(playerName) {
       this.ui.setStartPending(true);
       this.ui.showStartError("");
       try {
         const player = await this.liveSession.join(playerName);
         this.ui.setPlayerName(player.name);
         this.ui.hideStartMenu();
-        this._startPhase(phaseId, pivotStrategy, true);
+        this._beginRun(true);
       } catch (error) {
-        this.ui.showStartError(
-          error.message || "Não foi possível conectar ao servidor local da sala.",
-        );
+        this.ui.showStartError(error.message || "Não foi possível conectar ao servidor local da sala.");
       } finally {
         this.ui.setStartPending(false);
       }
     }
 
-    _publishLiveState(time, snapshot, manualSwap) {
+    _beginRun(showTutorial) {
+      window.clearTimeout(this.phaseTransitionTimer);
+      this.runSerial += 1;
+      this.runStartedAt = showTutorial ? null : performance.now();
+      this.runFinishedAt = null;
+      this.runCompleted = false;
+      this.completedScoreDelta = 0;
+      this.completedErrors = 0;
+      this.phaseCommitted = false;
+      this.modalOpen = showTutorial;
+      this.ui.hideVictory();
+      this._startPhase(PHASES[0].id, showTutorial);
+    }
+
+    _ensureRunStarted() {
+      if (this.liveSession.playerId && !this.runCompleted && this.runStartedAt === null) {
+        this.runStartedAt = performance.now();
+      }
+    }
+
+    _getRunStats(snapshot, now = performance.now()) {
+      const end = this.runFinishedAt ?? now;
+      const timeMs = this.runStartedAt === null ? 0 : Math.max(0, end - this.runStartedAt);
+      return calculateRunStats({
+        phaseCount: PHASES.length,
+        initialPhaseScore: INITIAL_SCORE,
+        completedScoreDelta: this.completedScoreDelta,
+        completedErrors: this.completedErrors,
+        currentPhaseScore: snapshot.score,
+        currentPhaseErrors: snapshot.errors,
+        phaseCommitted: this.phaseCommitted,
+        timeMs,
+      });
+    }
+
+    async _finishRun(snapshot, runSerial) {
+      const localResult = this._getRunStats(snapshot, this.runFinishedAt);
+      const delay = new Promise((resolve) => window.setTimeout(resolve, 900));
+      let savedResult = {};
+      try {
+        [savedResult] = await Promise.all([
+          this.liveSession.completeRun(localResult),
+          delay,
+        ]);
+      } catch {
+        await delay;
+        if (runSerial !== this.runSerial) return;
+        this.ui.showStatus("A run terminou, mas o ranking não pôde ser atualizado.", true);
+      }
+
+      if (runSerial !== this.runSerial) return;
+
+      this.ui.showRunComplete({
+        ...localResult,
+        bestScore: savedResult.bestScore ?? localResult.score,
+        bestTimeMs: savedResult.bestTimeMs ?? localResult.timeMs,
+        rank: savedResult.rank ?? null,
+      });
+    }
+
+    _publishLiveState(time, snapshot, manualSwap, run) {
       if (!this.liveSession.shouldCollectFrame(time)) return;
       let status = "jogando";
-      if (this.victoryShown || snapshot.state === GameState.VICTORY) {
-        status = "concluido";
-      } else if (this.ui.isTutorialOpen()) {
-        status = "tutorial";
-      } else if (this.modalOpen) {
-        status = "menu";
-      } else if (this.paused) {
-        status = "pausado";
-      }
+      if (this.runCompleted) status = "concluido";
+      else if (this.ui.isTutorialOpen()) status = "tutorial";
+      else if (this.modalOpen) status = "menu";
+      else if (this.paused) status = "pausado";
 
       const comparison = snapshot.comparison
         ? {
@@ -318,19 +385,16 @@
           }
         : null;
       this.liveSession.publish({
-        score: snapshot.score,
-        errors: snapshot.errors,
+        score: run.score,
+        errors: run.errors,
+        timeMs: run.timeMs,
         phaseId: this.currentPhase.id,
         phaseNumber: this.currentPhase.number,
         phaseTitle: this.currentPhase.title,
-        pivotStrategy: snapshot.pivotStrategy,
+        pivotStrategy: PivotStrategy.FIRST,
         status,
         gameState: {
-          snapshot: {
-            ...snapshot,
-            resolved: [...snapshot.resolved],
-            comparison,
-          },
+          snapshot: { ...snapshot, resolved: [...snapshot.resolved], comparison },
           robot: { ...this.robot },
           nearbyIndex: this.nearbyIndex,
           manualSwap,
@@ -341,7 +405,7 @@
       });
     }
 
-    _startPhase(phaseId, pivotStrategy, showTutorial) {
+    _startPhase(phaseId, showTutorial) {
       const phase = PHASES.find((candidate) => candidate.id === phaseId) ?? PHASES[0];
       this.currentPhase = phase;
       this.manualSwap = null;
@@ -350,9 +414,10 @@
       this.nearbyIndex = null;
       this.paused = false;
       this.victoryShown = false;
+      this.phaseCommitted = false;
       this.ui.hideVictory();
       this.ui.setPhase(phase);
-      this.engine.configure(phase.values[pivotStrategy], pivotStrategy);
+      this.engine.configure(phase.values[PivotStrategy.FIRST], PivotStrategy.FIRST);
       this.input.clear();
 
       if (showTutorial) {
@@ -368,19 +433,6 @@
     _getNextPhase() {
       const currentIndex = PHASES.findIndex((phase) => phase.id === this.currentPhase.id);
       return PHASES[currentIndex + 1] ?? null;
-    }
-
-    _returnToStartMenu() {
-      this.manualSwap = null;
-      this.renderer.resetEffects();
-      this.robot = this._createRobot();
-      this.nearbyIndex = null;
-      this.paused = false;
-      this.victoryShown = false;
-      this.input.enabled = false;
-      this.input.clear();
-      this.ui.hideVictory();
-      this.ui.showStartMenu(this.engine.pivotStrategy, this.currentPhase.id);
     }
   }
 

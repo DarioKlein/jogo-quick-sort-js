@@ -5,6 +5,16 @@
   const SPECTATED_INTERVAL_MS = 50;
   const BACKGROUND_INTERVAL_MS = 500;
   const HEARTBEAT_INTERVAL_MS = 4_000;
+  const IDENTITY_STORAGE_KEY = "sort-factory-player";
+
+  function identityKey(name) {
+    return String(name ?? "")
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLocaleLowerCase("pt-BR");
+  }
 
   class LiveSession {
     constructor() {
@@ -26,10 +36,14 @@
     async join(name) {
       if (this.playerId) return { id: this.playerId, name: this.playerName };
       this._setConnectionState("connecting");
+      const savedIdentity = this._readIdentity();
+      const token = identityKey(savedIdentity?.name) === identityKey(name)
+        ? savedIdentity.token
+        : null;
       const response = await fetch("/api/players/join", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, token }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -39,10 +53,23 @@
 
       this.playerId = result.id;
       this.playerName = result.name;
+      this._saveIdentity({ name: result.name, token: result.token });
       this._setConnectionState("online");
       this.heartbeatTimer = window.setInterval(() => {
         if (this.latestPayload) this.publish(this.latestPayload, true);
       }, HEARTBEAT_INTERVAL_MS);
+      return result;
+    }
+
+    async completeRun(run) {
+      if (!this.playerId) throw new Error("Jogador não conectado.");
+      const response = await fetch(`/api/players/${this.playerId}/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(run),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Não foi possível registrar a run.");
       return result;
     }
 
@@ -103,6 +130,22 @@
       if (this.connectionState === state) return;
       this.connectionState = state;
       this.onConnectionChange(state);
+    }
+
+    _readIdentity() {
+      try {
+        return JSON.parse(window.localStorage?.getItem(IDENTITY_STORAGE_KEY) ?? "null");
+      } catch {
+        return null;
+      }
+    }
+
+    _saveIdentity(identity) {
+      try {
+        window.localStorage?.setItem(IDENTITY_STORAGE_KEY, JSON.stringify(identity));
+      } catch {
+        // O jogo continua funcionando mesmo quando o navegador bloqueia o armazenamento local.
+      }
     }
   }
 

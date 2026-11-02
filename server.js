@@ -28,9 +28,20 @@ function normalizeName(value) {
     .slice(0, 24);
 }
 
+function normalizeNameKey(value) {
+  return normalizeName(value)
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLocaleLowerCase("pt-BR");
+}
+
 function toSafeInteger(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.trunc(number) : fallback;
+}
+
+function clampInteger(value, minimum, maximum, fallback = minimum) {
+  return Math.min(maximum, Math.max(minimum, toSafeInteger(value, fallback)));
 }
 
 function sendJson(response, status, value) {
@@ -79,11 +90,72 @@ function writeEvent(response, event, value) {
   }
 }
 
-function createSortFactoryServer({ root = __dirname } = {}) {
+function createSortFactoryServer({
+  root = __dirname,
+  rankingFile = path.join(root, "data", "ranking.json"),
+  resetRanking = true,
+} = {}) {
   const players = new Map();
+  const rankings = new Map();
   const rosterClients = new Set();
   const watchClients = new Map();
   const rosterTimers = new Map();
+
+  function publicRanking(record) {
+    return {
+      id: record.id,
+      name: record.name,
+      bestScore: record.bestScore,
+      bestTimeMs: record.bestTimeMs,
+      bestErrors: record.bestErrors,
+      lastScore: record.lastScore,
+      lastTimeMs: record.lastTimeMs,
+      attempts: record.attempts,
+      online: [...players.values()].some((player) => player.rankingId === record.id),
+      updatedAt: record.updatedAt,
+    };
+  }
+
+  function orderedRankings() {
+    return [...rankings.values()].sort((a, b) => (
+      Number(b.bestScore !== null) - Number(a.bestScore !== null)
+      || (b.bestScore ?? -1) - (a.bestScore ?? -1)
+      || (a.bestTimeMs ?? Number.POSITIVE_INFINITY) - (b.bestTimeMs ?? Number.POSITIVE_INFINITY)
+      || (a.bestErrors ?? Number.POSITIVE_INFINITY) - (b.bestErrors ?? Number.POSITIVE_INFINITY)
+      || a.name.localeCompare(b.name, "pt-BR")
+    ));
+  }
+
+  function serializeRanking() {
+    return orderedRankings().map(publicRanking);
+  }
+
+  function saveRanking() {
+    fs.mkdirSync(path.dirname(rankingFile), { recursive: true });
+    fs.writeFileSync(
+      rankingFile,
+      `${JSON.stringify({ players: [...rankings.values()] }, null, 2)}\n`,
+      "utf8",
+    );
+  }
+
+  function initializeRanking() {
+    if (!resetRanking && fs.existsSync(rankingFile)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(rankingFile, "utf8"));
+        (Array.isArray(data.players) ? data.players : []).forEach((record) => {
+          if (record?.id && record?.nameKey && record?.token) rankings.set(record.id, record);
+        });
+        return;
+      } catch {
+        rankings.clear();
+      }
+    }
+    rankings.clear();
+    saveRanking();
+  }
+
+  initializeRanking();
 
   function summarize(player) {
     return {
@@ -91,6 +163,7 @@ function createSortFactoryServer({ root = __dirname } = {}) {
       name: player.name,
       score: player.score,
       errors: player.errors,
+      timeMs: player.timeMs,
       phaseId: player.phaseId,
       phaseNumber: player.phaseNumber,
       phaseTitle: player.phaseTitle,
@@ -110,6 +183,10 @@ function createSortFactoryServer({ root = __dirname } = {}) {
     clients.forEach((client) => {
       if (!writeEvent(client, event, value)) clients.delete(client);
     });
+  }
+
+  function broadcastRanking() {
+    emitToSet(rosterClients, "ranking", serializeRanking());
   }
 
   function broadcastRosterPlayer(player) {
@@ -153,6 +230,7 @@ function createSortFactoryServer({ root = __dirname } = {}) {
       viewers.forEach((client) => client.end());
       watchClients.delete(playerId);
     }
+    broadcastRanking();
   }
 
   function openEventStream(request, response, clients, initialEvent, initialValue) {
@@ -170,12 +248,17 @@ function createSortFactoryServer({ root = __dirname } = {}) {
 
   async function handleApi(request, response, url) {
     if (request.method === "GET" && url.pathname === "/api/health") {
-      sendJson(response, 200, { ok: true, players: players.size });
+      sendJson(response, 200, { ok: true, players: players.size, ranking: rankings.size });
       return true;
     }
 
     if (request.method === "GET" && url.pathname === "/api/players") {
       sendJson(response, 200, [...players.values()].map(summarize));
+      return true;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/ranking") {
+      sendJson(response, 200, serializeRanking());
       return true;
     }
 
@@ -187,6 +270,7 @@ function createSortFactoryServer({ root = __dirname } = {}) {
         "roster",
         [...players.values()].map(summarize),
       );
+      writeEvent(response, "ranking", serializeRanking());
       return true;
     }
 
@@ -217,12 +301,47 @@ function createSortFactoryServer({ root = __dirname } = {}) {
         return true;
       }
 
+      const nameKey = normalizeNameKey(name);
+      let ranking = [...rankings.values()].find((record) => record.nameKey === nameKey);
+      const knownIdentity = Boolean(ranking);
+      if (ranking && body.token !== ranking.token) {
+        sendJson(response, 409, {
+          error: "Esse nome já está sendo usado. Acrescente seu sobrenome ou uma inicial.",
+        });
+        return true;
+      }
+
       const now = Date.now();
+      if (!ranking) {
+        ranking = {
+          id: randomUUID(),
+          token: randomUUID(),
+          name,
+          nameKey,
+          bestScore: null,
+          bestTimeMs: null,
+          bestErrors: null,
+          lastScore: null,
+          lastTimeMs: null,
+          attempts: 0,
+          updatedAt: now,
+        };
+        rankings.set(ranking.id, ranking);
+        saveRanking();
+      }
+
+      const activeSession = [...players.values()].find((player) => player.rankingId === ranking.id);
+      if (activeSession) {
+        removePlayer(activeSession.id, "reconnected");
+      }
+
       const player = {
         id: randomUUID(),
-        name,
-        score: 1000,
+        rankingId: ranking.id,
+        name: ranking.name,
+        score: 0,
         errors: 0,
+        timeMs: 0,
         phaseId: "AVERAGE",
         phaseNumber: 1,
         phaseTitle: "Caso médio",
@@ -236,11 +355,16 @@ function createSortFactoryServer({ root = __dirname } = {}) {
       };
       players.set(player.id, player);
       broadcastRosterPlayer(player);
-      sendJson(response, 201, { id: player.id, name: player.name });
+      broadcastRanking();
+      sendJson(response, knownIdentity ? 200 : 201, {
+        id: player.id,
+        name: player.name,
+        token: ranking.token,
+      });
       return true;
     }
 
-    const playerMatch = url.pathname.match(/^\/api\/players\/([a-f0-9-]+)(?:\/(state|leave))?$/i);
+    const playerMatch = url.pathname.match(/^\/api\/players\/([a-f0-9-]+)(?:\/(state|complete|leave))?$/i);
     if (!playerMatch) return false;
 
     const player = players.get(playerMatch[1]);
@@ -260,15 +384,65 @@ function createSortFactoryServer({ root = __dirname } = {}) {
       return true;
     }
 
+    if (request.method === "POST" && playerMatch[2] === "complete") {
+      const body = await readJson(request);
+      const ranking = rankings.get(player.rankingId);
+      if (!ranking) {
+        sendJson(response, 404, { error: "Jogador não encontrado no ranking." });
+        return true;
+      }
+
+      const score = clampInteger(body.score, 0, 10_000_000);
+      const timeMs = clampInteger(body.timeMs, 1_000, 86_400_000, 1_000);
+      const errors = clampInteger(body.errors, 0, 100_000);
+      const isBest = ranking.bestScore === null
+        || score > ranking.bestScore
+        || (score === ranking.bestScore && timeMs < ranking.bestTimeMs)
+        || (score === ranking.bestScore && timeMs === ranking.bestTimeMs && errors < ranking.bestErrors);
+
+      ranking.lastScore = score;
+      ranking.lastTimeMs = timeMs;
+      ranking.attempts += 1;
+      ranking.updatedAt = Date.now();
+      if (isBest) {
+        ranking.bestScore = score;
+        ranking.bestTimeMs = timeMs;
+        ranking.bestErrors = errors;
+      }
+
+      player.score = score;
+      player.timeMs = timeMs;
+      player.errors = errors;
+      player.status = "concluido";
+      player.updatedAt = ranking.updatedAt;
+      player.lastSeen = ranking.updatedAt;
+      saveRanking();
+      broadcastRanking();
+      broadcastRosterPlayer(player);
+      broadcastPlayerState(player);
+
+      const ordered = orderedRankings();
+      sendJson(response, 200, {
+        ok: true,
+        rank: ordered.findIndex((record) => record.id === player.rankingId) + 1,
+        isBest,
+        bestScore: ranking.bestScore,
+        bestTimeMs: ranking.bestTimeMs,
+        attempts: ranking.attempts,
+      });
+      return true;
+    }
+
     if (request.method === "POST" && playerMatch[2] === "state") {
       const body = await readJson(request);
       const now = Date.now();
       player.score = toSafeInteger(body.score, player.score);
       player.errors = Math.max(0, toSafeInteger(body.errors, player.errors));
+      player.timeMs = Math.max(0, toSafeInteger(body.timeMs, player.timeMs));
       player.phaseId = String(body.phaseId ?? player.phaseId).slice(0, 24);
       player.phaseNumber = Math.max(1, toSafeInteger(body.phaseNumber, player.phaseNumber));
       player.phaseTitle = String(body.phaseTitle ?? player.phaseTitle).slice(0, 40);
-      player.pivotStrategy = body.pivotStrategy === "LAST" ? "LAST" : "FIRST";
+      player.pivotStrategy = "FIRST";
       player.status = ["menu", "tutorial", "jogando", "pausado", "concluido"]
         .includes(body.status) ? body.status : player.status;
       player.gameState = body.gameState && typeof body.gameState === "object"
@@ -365,7 +539,7 @@ function createSortFactoryServer({ root = __dirname } = {}) {
     watchClients.forEach((clients) => clients.forEach((client) => client.end()));
   });
 
-  server.sortFactoryState = { players, removePlayer };
+  server.sortFactoryState = { players, rankings, removePlayer, rankingFile };
   return server;
 }
 
@@ -391,8 +565,9 @@ if (require.main === module) {
     getLocalAddresses(port).forEach(({ interfaceName, url }) => {
       console.log(`Rede (${interfaceName}): ${url}`);
     });
-    console.log("\nOs dados ficam somente na memória e somem ao encerrar o servidor.\n");
+    console.log(`\nRanking temporário: ${server.sortFactoryState.rankingFile}`);
+    console.log("O arquivo é recriado vazio a cada inicialização do servidor.\n");
   });
 }
 
-module.exports = { createSortFactoryServer, normalizeName };
+module.exports = { createSortFactoryServer, normalizeName, normalizeNameKey };

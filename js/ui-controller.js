@@ -1,7 +1,8 @@
 (function initializeUiController(namespace) {
   "use strict";
 
-  const { PivotStrategy, PhaseId, PHASES, TUTORIAL_PAGES } = namespace.Constants;
+  const { PHASES, TUTORIAL_PAGES } = namespace.Constants;
+  const { formatDuration } = namespace.Utils;
 
   class UiController {
     constructor() {
@@ -9,7 +10,7 @@
         objective: document.querySelector("#objective"),
         phaseName: document.querySelector("#phase-name"),
         pivot: document.querySelector("#pivot-value"),
-        pivotStrategy: document.querySelector("#pivot-strategy"),
+        runTime: document.querySelector("#run-time"),
         range: document.querySelector("#active-range"),
         score: document.querySelector("#score"),
         errors: document.querySelector("#errors"),
@@ -23,8 +24,6 @@
         playerNameError: document.querySelector("#player-name-error"),
         start: document.querySelector("#start-modal"),
         startMission: document.querySelector("#start-mission-button"),
-        pivotOptions: [...document.querySelectorAll("[data-pivot-strategy]")],
-        phaseOptions: [...document.querySelectorAll("[data-phase-id]")],
         tutorial: document.querySelector("#tutorial-modal"),
         tutorialTitle: document.querySelector("#tutorial-title"),
         tutorialText: document.querySelector("#tutorial-text"),
@@ -34,18 +33,15 @@
         tutorialNext: document.querySelector("#tutorial-next"),
         tutorialSkip: document.querySelector("#tutorial-skip"),
         victory: document.querySelector("#victory-modal"),
-        victoryArray: document.querySelector("#victory-array"),
-        victoryPhase: document.querySelector("#victory-phase"),
         victoryLesson: document.querySelector("#victory-lesson"),
         victoryScore: document.querySelector("#victory-score"),
+        victoryTime: document.querySelector("#victory-time"),
         victoryErrors: document.querySelector("#victory-errors"),
-        nextPhase: document.querySelector("#next-phase-button"),
+        victoryRank: document.querySelector("#victory-rank"),
         playAgain: document.querySelector("#play-again-button"),
       };
 
       this.tutorialIndex = 0;
-      this.selectedPivotStrategy = PivotStrategy.FIRST;
-      this.selectedPhaseId = PhaseId.AVERAGE;
       this.currentPhase = PHASES[0];
       this.playerName = "";
       this.statusTimer = null;
@@ -53,24 +49,23 @@
       this.onRestart = () => {};
       this.onStart = () => {};
       this.onPlayAgain = () => {};
-      this.onNextPhase = () => {};
 
       this._bindEvents();
       this._renderTutorialPage();
     }
 
-    update(snapshot) {
+    update(snapshot, run = {}) {
       const { elements } = this;
       elements.objective.textContent = snapshot.objective;
       elements.pivot.textContent = snapshot.pivotValue ?? "—";
-      elements.pivotStrategy.textContent = snapshot.pivotStrategy === PivotStrategy.LAST
-        ? "FINAL"
-        : "INÍCIO";
       elements.range.textContent = snapshot.segment
         ? `${snapshot.segment.start + 1}–${snapshot.segment.end + 1}`
         : "—";
-      elements.score.textContent = snapshot.score;
-      elements.errors.textContent = snapshot.errors;
+      this.updateRunStats({
+        score: run.score ?? snapshot.score,
+        errors: run.errors ?? snapshot.errors,
+        timeMs: run.timeMs ?? 0,
+      });
       elements.array.replaceChildren(
         ...snapshot.values.map((value, index) => {
           const item = document.createElement("span");
@@ -86,13 +81,18 @@
       );
     }
 
+    updateRunStats(run) {
+      this.elements.score.textContent = run.score;
+      this.elements.errors.textContent = run.errors;
+      this.elements.runTime.textContent = formatDuration(run.timeMs);
+    }
+
     setObjective(message) {
       this.elements.objective.textContent = message;
     }
 
     setPhase(phase) {
       this.currentPhase = phase;
-      this.selectedPhaseId = phase.id;
       this.elements.phaseName.textContent = `${phase.number} · ${phase.shortTitle}`;
     }
 
@@ -107,20 +107,17 @@
       this.elements.playerChip.dataset.connection = state;
       const labels = {
         connecting: "CONECTANDO",
-        online: this.elements.playerName.value || "ONLINE",
         error: "SEM CONEXÃO",
         offline: "AGUARDANDO",
       };
       this.elements.playerDisplay.textContent = state === "online" && this.playerName
         ? this.playerName.toUpperCase()
-        : labels[state] ?? labels.offline;
+        : labels[state] ?? "ONLINE";
     }
 
     setStartPending(isPending) {
       this.elements.startMission.disabled = isPending;
-      this.elements.startMission.textContent = isPending
-        ? "Entrando na sala…"
-        : "Continuar para o treinamento";
+      this.elements.startMission.textContent = isPending ? "Entrando na sala…" : "Iniciar desafio";
     }
 
     showStartError(message) {
@@ -146,41 +143,16 @@
       window.setTimeout(() => this.elements.tutorialNext.focus(), 0);
     }
 
-    showStartMenu(pivotStrategy = PivotStrategy.FIRST, phaseId = PhaseId.AVERAGE) {
-      this.selectPivotStrategy(pivotStrategy);
-      this.selectPhase(phaseId);
+    showStartMenu() {
       this.elements.victory.classList.add("modal--hidden");
       this.elements.tutorial.classList.add("modal--hidden");
       this.elements.start.classList.remove("modal--hidden");
       this.onTutorialVisibilityChange(true);
-      window.setTimeout(
-        () => (this.elements.playerName.readOnly
-          ? this.elements.pivotOptions[0]
-          : this.elements.playerName).focus(),
-        0,
-      );
+      window.setTimeout(() => this.elements.playerName.focus(), 0);
     }
 
     hideStartMenu() {
       this.elements.start.classList.add("modal--hidden");
-    }
-
-    selectPivotStrategy(pivotStrategy) {
-      this.selectedPivotStrategy = pivotStrategy;
-      this.elements.pivotOptions.forEach((option) => {
-        const selected = option.dataset.pivotStrategy === pivotStrategy;
-        option.classList.toggle("is-selected", selected);
-        option.setAttribute("aria-pressed", String(selected));
-      });
-    }
-
-    selectPhase(phaseId) {
-      this.selectedPhaseId = phaseId;
-      this.elements.phaseOptions.forEach((option) => {
-        const selected = option.dataset.phaseId === phaseId;
-        option.classList.toggle("is-selected", selected);
-        option.setAttribute("aria-pressed", String(selected));
-      });
     }
 
     closeTutorial() {
@@ -193,21 +165,14 @@
       return !this.elements.tutorial.classList.contains("modal--hidden");
     }
 
-    showVictory(snapshot, phase, nextPhase) {
-      this.elements.victoryArray.textContent = `[${snapshot.values.join(", ")}]`;
-      this.elements.victoryPhase.textContent = `FASE ${phase.number} — ${phase.title.toUpperCase()} • ${phase.complexity}`;
-      this.elements.victoryLesson.textContent = phase.lesson;
-      this.elements.victoryScore.textContent = snapshot.score;
-      this.elements.victoryErrors.textContent = snapshot.errors;
-      this.elements.nextPhase.classList.toggle("modal--hidden", !nextPhase);
-      if (nextPhase) {
-        this.elements.nextPhase.textContent = `Próxima fase: ${nextPhase.title}`;
-      }
+    showRunComplete(result) {
+      this.elements.victoryLesson.textContent = `Penalidade por tempo: −${result.timePenalty} pontos. Melhor resultado: ${result.bestScore} pontos em ${formatDuration(result.bestTimeMs)}.`;
+      this.elements.victoryScore.textContent = result.score;
+      this.elements.victoryTime.textContent = formatDuration(result.timeMs);
+      this.elements.victoryErrors.textContent = result.errors;
+      this.elements.victoryRank.textContent = result.rank ? `#${result.rank}` : "—";
       this.elements.victory.classList.remove("modal--hidden");
-      window.setTimeout(
-        () => (nextPhase ? this.elements.nextPhase : this.elements.playAgain).focus(),
-        0,
-      );
+      window.setTimeout(() => this.elements.playAgain.focus(), 0);
     }
 
     hideVictory() {
@@ -218,13 +183,6 @@
       this.elements.help.addEventListener("click", () => this.openTutorial(true));
       this.elements.restart.addEventListener("click", () => this.onRestart());
       this.elements.playAgain.addEventListener("click", () => this.onPlayAgain());
-      this.elements.nextPhase.addEventListener("click", () => this.onNextPhase());
-      this.elements.pivotOptions.forEach((option) => {
-        option.addEventListener("click", () => this.selectPivotStrategy(option.dataset.pivotStrategy));
-      });
-      this.elements.phaseOptions.forEach((option) => {
-        option.addEventListener("click", () => this.selectPhase(option.dataset.phaseId));
-      });
       this.elements.startMission.addEventListener("click", () => {
         const playerName = this.elements.playerName.value.trim();
         if (playerName.length < 2) {
@@ -232,7 +190,7 @@
           return;
         }
         this.showStartError("");
-        this.onStart(playerName, this.selectedPivotStrategy, this.selectedPhaseId);
+        this.onStart(playerName);
       });
       this.elements.playerName.addEventListener("input", () => this.showStartError(""));
       this.elements.playerName.addEventListener("keydown", (event) => {
@@ -265,21 +223,16 @@
 
     _renderTutorialPage() {
       const page = TUTORIAL_PAGES[this.tutorialIndex];
-      const selectedPhase = PHASES.find((phase) => phase.id === this.selectedPhaseId) ?? PHASES[0];
       this.elements.tutorialTitle.textContent = page.title;
-      const pivotText = this.selectedPivotStrategy === PivotStrategy.LAST
-        ? "Você escolheu o pivô no final: a última caixa de cada trecho será a referência da partição."
-        : "Você escolheu o pivô no início: a primeira caixa de cada trecho será a referência da partição.";
-      const phaseText = `Fase ${selectedPhase.number} — ${selectedPhase.title}: ${selectedPhase.description}`;
       this.elements.tutorialText.textContent = this.tutorialIndex === 0
-        ? phaseText
+        ? "Complete em sequência o caso médio, o melhor caso e o pior caso. O cronômetro começa ao iniciar a missão."
         : this.tutorialIndex === 2
-          ? pivotText
+          ? "O pivô será sempre a primeira caixa de cada trecho, que servirá como referência da partição."
           : page.text;
       this.elements.tutorialArt.style.setProperty("--tutorial-art", page.art);
       this.elements.tutorialBack.disabled = this.tutorialIndex === 0;
       this.elements.tutorialNext.textContent = this.tutorialIndex === TUTORIAL_PAGES.length - 1
-        ? "Iniciar missão"
+        ? "Iniciar run"
         : "Avançar";
       this.elements.tutorialDots.replaceChildren(
         ...TUTORIAL_PAGES.map((_, index) => {

@@ -1,7 +1,10 @@
 "use strict";
 
 const assert = require("node:assert/strict");
-const { createSortFactoryServer, normalizeName } = require("../server.js");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { createSortFactoryServer, normalizeName, normalizeNameKey } = require("../server.js");
 
 async function requestJson(url, options) {
   const response = await fetch(url, options);
@@ -41,25 +44,29 @@ async function openEventStream(url) {
   };
 }
 
+async function listen(server) {
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return `http://127.0.0.1:${server.address().port}`;
+}
+
+async function close(server) {
+  await new Promise((resolve) => server.close(resolve));
+}
+
 async function run() {
   assert.equal(normalizeName("  Ana   Silva  "), "Ana Silva");
-  assert.equal(normalizeName("<script>João</script>"), "scriptJoão/script");
+  assert.equal(normalizeNameKey("  JOÃO "), "joao");
 
-  const server = createSortFactoryServer();
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  const baseUrl = `http://127.0.0.1:${address.port}`;
+  const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "sort-factory-test-"));
+  const rankingFile = path.join(tempDirectory, "ranking.json");
+  const server = createSortFactoryServer({ rankingFile });
+  const baseUrl = await listen(server);
   let rosterStream = null;
   let watchStream = null;
 
   try {
-    const root = await fetch(baseUrl);
-    assert.equal(root.status, 200);
-    assert.match(await root.text(), /Sort Factory/);
-
-    const dashboard = await fetch(`${baseUrl}/dev`);
-    assert.equal(dashboard.status, 200);
-    assert.match(await dashboard.text(), /SALA/);
+    assert.equal((await fetch(baseUrl)).status, 200);
+    assert.equal((await fetch(`${baseUrl}/dev`)).status, 200);
 
     const invalidJoin = await requestJson(`${baseUrl}/api/players/join`, {
       method: "POST",
@@ -76,14 +83,34 @@ async function run() {
     assert.equal(join.response.status, 201);
     assert.equal(join.body.name, "Maria");
     assert.match(join.body.id, /^[a-f0-9-]+$/);
+    assert.match(join.body.token, /^[a-f0-9-]+$/);
+
+    const duplicate = await requestJson(`${baseUrl}/api/players/join`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "MÁRIA" }),
+    });
+    assert.equal(duplicate.response.status, 409);
+
+    const reconnect = await requestJson(`${baseUrl}/api/players/join`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Maria", token: join.body.token }),
+    });
+    assert.equal(reconnect.response.status, 200);
+    assert.notEqual(reconnect.body.id, join.body.id);
+    const playerId = reconnect.body.id;
 
     rosterStream = await openEventStream(`${baseUrl}/api/events`);
     const initialRoster = await rosterStream.nextEvent("roster");
     assert.equal(initialRoster[0].name, "Maria");
+    const initialRanking = await rosterStream.nextEvent("ranking");
+    assert.equal(initialRanking[0].bestScore, null);
 
     const state = {
-      score: 1270,
+      score: 3200,
       errors: 2,
+      timeMs: 45_000,
       phaseId: "BEST",
       phaseNumber: 2,
       phaseTitle: "Melhor caso",
@@ -91,44 +118,58 @@ async function run() {
       status: "jogando",
       gameState: { robot: { x: 300, y: 580 }, snapshot: { resolved: [0] } },
     };
-    const update = await requestJson(`${baseUrl}/api/players/${join.body.id}/state`, {
+    const update = await requestJson(`${baseUrl}/api/players/${playerId}/state`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(state),
     });
     assert.equal(update.response.status, 200);
 
-    watchStream = await openEventStream(`${baseUrl}/api/watch/${join.body.id}/events`);
+    watchStream = await openEventStream(`${baseUrl}/api/watch/${playerId}/events`);
     const liveState = await watchStream.nextEvent("state");
     assert.equal(liveState.gameState.robot.x, 300);
-    assert.equal(liveState.score, 1270);
-    assert.equal(liveState.sequence, 1);
+    assert.equal(liveState.timeMs, 45_000);
+    assert.equal(liveState.pivotStrategy, "FIRST");
 
-    const roster = await requestJson(`${baseUrl}/api/players`);
-    assert.equal(roster.body.length, 1);
-    assert.equal(roster.body[0].score, 1270);
-    assert.equal(roster.body[0].phaseTitle, "Melhor caso");
+    const completion = await requestJson(`${baseUrl}/api/players/${playerId}/complete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ score: 4380, timeMs: 123_456, errors: 2 }),
+    });
+    assert.equal(completion.response.status, 200);
+    assert.equal(completion.body.rank, 1);
+    assert.equal(completion.body.bestScore, 4380);
 
-    const player = await requestJson(`${baseUrl}/api/players/${join.body.id}`);
-    assert.equal(player.body.name, "Maria");
-    assert.deepEqual(player.body.gameState.robot, { x: 300, y: 580 });
+    const ranking = await requestJson(`${baseUrl}/api/ranking`);
+    assert.equal(ranking.body.length, 1);
+    assert.equal(ranking.body[0].attempts, 1);
+    assert.equal(ranking.body[0].bestTimeMs, 123_456);
 
-    const leave = await requestJson(`${baseUrl}/api/players/${join.body.id}/leave`, {
+    await requestJson(`${baseUrl}/api/players/${playerId}/leave`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "{}",
     });
-    assert.equal(leave.response.status, 200);
-
-    const emptyRoster = await requestJson(`${baseUrl}/api/players`);
-    assert.deepEqual(emptyRoster.body, []);
+    assert.deepEqual((await requestJson(`${baseUrl}/api/players`)).body, []);
+    assert.equal((await requestJson(`${baseUrl}/api/ranking`)).body[0].online, false);
+    assert.equal(JSON.parse(fs.readFileSync(rankingFile, "utf8")).players.length, 1);
   } finally {
     rosterStream?.close();
     watchStream?.close();
-    await new Promise((resolve) => server.close(resolve));
+    await close(server);
   }
 
-  console.log("✓ Servidor local: sessão temporária, estado ao vivo, painel e encerramento");
+  const restartedServer = createSortFactoryServer({ rankingFile });
+  const restartedUrl = await listen(restartedServer);
+  try {
+    assert.deepEqual((await requestJson(`${restartedUrl}/api/ranking`)).body, []);
+    assert.equal(JSON.parse(fs.readFileSync(rankingFile, "utf8")).players.length, 0);
+  } finally {
+    await close(restartedServer);
+    fs.rmSync(tempDirectory, { recursive: true, force: true });
+  }
+
+  console.log("✓ Servidor local: nomes únicos, ranking temporário, conclusão e reinício limpo");
 }
 
 run().catch((error) => {

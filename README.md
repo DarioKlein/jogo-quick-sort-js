@@ -5,7 +5,8 @@ Jogo educativo 2D no qual o jogador executa cada etapa do Quick Sort caminhando 
 ## Como executar
 
 Não há dependências externas nem banco de dados. O servidor local usa apenas recursos nativos do
-Node.js e mantém todas as sessões na memória.
+Node.js. As partidas abertas ficam na memória e o ranking da execução atual é espelhado em
+`data/ranking.json`.
 
 1. Instale o Node.js 18 ou superior.
 2. No terminal, execute `npm start`.
@@ -21,8 +22,9 @@ Painel dev:   http://localhost:3000/dev
 Rede da sala: http://192.168.0.15:3000
 ```
 
-Ao encerrar o servidor, nomes, pontuações e partidas desaparecem. Nenhuma informação é gravada em
-arquivo ou banco de dados.
+O arquivo de ranking é recriado vazio sempre que `npm start` inicia uma nova execução. Durante a aula,
+os nomes e melhores resultados continuam no ranking mesmo se um aluno fechar o navegador. Nomes são
+únicos, ignorando maiúsculas, espaços e acentos; o mesmo navegador consegue recuperar sua identidade.
 
 A transmissão prioriza o desempenho de quem está jogando: o cliente envia no máximo 20 estados por
 segundo quando é assistido. O painel reproduz esses estados em 60 FPS com um buffer adaptativo de
@@ -37,33 +39,33 @@ Chrome/Chromium, Edge e Firefox recentes são suportados.
 - `E` ou `Espaço`: inspecionar ou selecionar a caixa próxima;
 - `Esc`: fechar o tutorial;
 - **Como jogar**: reabrir o tutorial;
-- **Reiniciar**: restaurar completamente a fase.
+- **Reiniciar run**: zerar a tentativa atual e voltar ao caso médio.
 
 ## Regra ensinada
 
-O jogo contém três fases que demonstram comportamentos diferentes do Quick Sort:
+Cada run percorre automaticamente três fases, sempre nesta ordem:
 
 | Fase | Caso | Vetor-base | Comportamento |
 | --- | --- | --- | --- |
 | 1 | Médio | `[8, 3, 12, 5, 1, 10]` | Partições irregulares; custo esperado `O(n log n)` |
-| 2 | Melhor | Adaptado à estratégia escolhida | Partições tão equilibradas quanto possível; `O(n log n)` |
+| 2 | Melhor | `[4, 1, 3, 2, 5, 6]` | Partições tão equilibradas quanto possível; `O(n log n)` |
 | 3 | Pior | `[1, 2, 3, 4, 5, 6]` | Partições com `n−1` elementos; `O(n²)` |
 
-Antes da missão, o jogador também escolhe uma das duas variantes:
-
-- **pivô no início:** `i` parte da esquerda e o pivô termina na posição de `j`;
-- **pivô no final:** a busca é espelhada e o pivô termina na posição de `i`.
+O pivô é sempre o primeiro elemento do trecho: `i` parte da esquerda e o pivô termina na posição de `j`.
 
 Em cada subarray:
 
-1. o primeiro ou o último elemento é escolhido como pivô, conforme o menu inicial;
+1. o primeiro elemento é escolhido como pivô;
 2. `i` avança enquanto encontra valores menores ou iguais ao pivô;
 3. `j` recua enquanto encontra valores maiores que o pivô;
 4. se os ponteiros ainda não se cruzaram, suas caixas são trocadas;
 5. após o cruzamento, o pivô troca de posição com `j`;
 6. o processo continua primeiro no lado esquerdo e depois no direito.
 
-Ao terminar uma fase, o jogo apresenta a complexidade observada e permite avançar diretamente para a próxima.
+Ao terminar uma fase, o jogo avança automaticamente. Depois do pior caso, registra a pontuação e o
+tempo total da run. A pontuação reúne as três fases e perde 3 pontos por segundo; em caso de empate no
+ranking, vence o menor tempo e depois o menor número de erros. Uma nova tentativa preserva o melhor
+resultado anterior do jogador.
 
 Durante uma troca, a primeira caixa selecionada fica nas mãos do robô. Ao chegar à segunda posição e interagir, essa caixa ocupa o encaixe e a caixa deslocada passa para as mãos do robô. O jogador precisa caminhar de volta ao primeiro encaixe vazio e interagir novamente para concluir a troca. O robô nunca percorre esse caminho automaticamente.
 
@@ -77,7 +79,7 @@ O projeto usa módulos no padrão IIFE, compartilhados pelo namespace `window.So
 ├── dev.html                  # ranking e modo espectador do apresentador
 ├── style.css
 ├── dev.css
-├── server.js                 # servidor HTTP e sessões mantidas apenas em memória
+├── server.js                 # servidor HTTP, sessões ao vivo e ranking temporário em JSON
 ├── js/
 │   ├── constants.js          # configuração imutável e conteúdo do tutorial
 │   ├── utils.js              # funções puras compartilhadas
@@ -86,6 +88,7 @@ O projeto usa módulos no padrão IIFE, compartilhados pelo namespace `window.So
 │   ├── ui-controller.js      # HUD, tutorial e modal de vitória
 │   ├── renderer.js           # cenário e animações no Canvas 2D
 │   ├── live-session.js       # envio temporário do estado do jogador
+│   ├── run-scoring.js        # pontuação acumulada e penalidade por tempo
 │   ├── spectator-buffer.js   # fila e interpolação suave da transmissão
 │   ├── dev-dashboard.js      # ranking e reprodução das partidas ao vivo
 │   └── game.js               # ciclo do jogo e coordenação dos módulos
@@ -106,7 +109,8 @@ npm test
 npm run check
 ```
 
-Os testes percorrem automaticamente as três fases com as duas estratégias de pivô, confirmam os vetores finais, comparam o número de ações do melhor e do pior caso, verificam ações incorretas e exercitam a renderização em um Canvas simulado.
+Os testes percorrem as fases do algoritmo, validam a pontuação da run, nomes únicos, ranking temporário,
+reinicialização limpa do JSON, transmissão e renderização em Canvas simulado.
 
 ## Acessibilidade
 
@@ -120,6 +124,6 @@ Os testes percorrem automaticamente as três fases com as duas estratégias de p
 
 - três fases fixas com seis caixas cada;
 - controles por teclado, sem interface de toque dedicada;
-- progresso mantido apenas durante a sessão;
+- ranking mantido somente durante a execução atual do servidor;
 - painel do apresentador sem autenticação, destinado somente à rede local da apresentação;
 - áudio não incluído nesta versão.

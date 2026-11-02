@@ -29,9 +29,16 @@ assertSelectorsExist("index.html", ["js/game.js", "js/ui-controller.js"]);
 assertSelectorsExist("dev.html", ["js/dev-dashboard.js"]);
 
 const gameHtml = read("index.html");
+assert.doesNotMatch(gameHtml, /data-pivot-strategy|data-phase-id/);
+assert.match(gameHtml, /id="run-time"/);
+assert.match(gameHtml, /id="victory-rank"/);
 assert.ok(
   gameHtml.indexOf("js/live-session.js") < gameHtml.indexOf("js/game.js"),
   "live-session.js deve carregar antes de game.js",
+);
+assert.ok(
+  gameHtml.indexOf("js/run-scoring.js") < gameHtml.indexOf("js/game.js"),
+  "run-scoring.js deve carregar antes de game.js",
 );
 
 const devHtml = read("dev.html");

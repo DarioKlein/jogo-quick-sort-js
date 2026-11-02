@@ -42,7 +42,7 @@
           </div>
           <button id="help-button" class="hud-button" type="button">Como jogar</button>
           <button id="restart-button" class="hud-button hud-button--danger" type="button">
-            Reiniciar
+            Reiniciar run
           </button>
         </div>
       </header>
@@ -64,8 +64,8 @@
             <strong id="pivot-value" class="stat__value stat__value--pivot">—</strong>
           </div>
           <div class="stat">
-            <span class="stat__label">ESTRATÉGIA</span>
-            <strong id="pivot-strategy" class="stat__value">INÍCIO</strong>
+            <span class="stat__label">TEMPO</span>
+            <strong id="run-time" class="stat__value">00:00</strong>
           </div>
           <div class="stat">
             <span class="stat__label">TRECHO</span>
@@ -105,10 +105,10 @@
       <div class="modal__backdrop"></div>
       <section class="modal__card modal__card--start">
         <div class="modal__accent"></div>
-        <p class="eyebrow">CONFIGURAÇÃO DA LINHA</p>
-        <h2 id="start-title">Prepare seu operador</h2>
+        <p class="eyebrow">DESAFIO DA TURMA</p>
+        <h2 id="start-title">Identifique seu operador</h2>
         <p class="modal__text modal__text--start">
-          Informe seu nome e configure a missão. Seu progresso aparecerá no painel da sala.
+          Informe seu nome para iniciar uma run completa. Sua melhor tentativa aparecerá no ranking da sala.
         </p>
 
         <label class="player-name-field" for="player-name">
@@ -126,48 +126,18 @@
         </label>
         <p id="player-name-error" class="form-error" role="alert"></p>
 
-        <p class="menu-section-label">ESCOLHA O PIVÔ</p>
-        <div class="pivot-options" role="group" aria-label="Posição do pivô">
-          <button class="pivot-option is-selected" type="button" data-pivot-strategy="FIRST" aria-pressed="true">
-            <span class="pivot-option__diagram" aria-hidden="true">
-              <i class="is-pivot">8</i><i>3</i><i>12</i><i>5</i>
-            </span>
-            <strong>No início</strong>
-            <small>A primeira caixa do trecho será o pivô.</small>
-          </button>
-          <button class="pivot-option" type="button" data-pivot-strategy="LAST" aria-pressed="false">
-            <span class="pivot-option__diagram" aria-hidden="true">
-              <i>8</i><i>3</i><i>12</i><i class="is-pivot">5</i>
-            </span>
-            <strong>No final</strong>
-            <small>A última caixa do trecho será o pivô.</small>
-          </button>
-        </div>
+        <ol class="challenge-sequence" aria-label="Sequência da run">
+          <li><span>01</span><strong>Caso médio</strong><small>Partições irregulares</small></li>
+          <li><span>02</span><strong>Melhor caso</strong><small>Partições equilibradas</small></li>
+          <li><span>03</span><strong>Pior caso</strong><small>Partições n−1</small></li>
+        </ol>
 
-        <p class="menu-section-label">ESCOLHA A FASE</p>
-        <div class="phase-options" role="group" aria-label="Caso de execução do Quick Sort">
-          <button class="phase-option is-selected" type="button" data-phase-id="AVERAGE" aria-pressed="true">
-            <span class="phase-option__number">01</span>
-            <strong>Caso médio</strong>
-            <small>Partições irregulares</small>
-            <em>O(n log n) esperado</em>
-          </button>
-          <button class="phase-option" type="button" data-phase-id="BEST" aria-pressed="false">
-            <span class="phase-option__number">02</span>
-            <strong>Melhor caso</strong>
-            <small>Partições equilibradas</small>
-            <em>O(n log n)</em>
-          </button>
-          <button class="phase-option" type="button" data-phase-id="WORST" aria-pressed="false">
-            <span class="phase-option__number">03</span>
-            <strong>Pior caso</strong>
-            <small>Partições n−1</small>
-            <em>O(n²)</em>
-          </button>
-        </div>
+        <p class="challenge-rule">
+          O pivô será sempre a primeira caixa de cada trecho. Pontuação, erros e tempo continuam entre as três fases.
+        </p>
 
         <button id="start-mission-button" class="primary-button primary-button--wide" type="button">
-          Continuar para o treinamento
+          Iniciar desafio
         </button>
       </section>
     </div>
@@ -195,22 +165,20 @@
       <div class="modal__backdrop"></div>
       <section class="modal__card modal__card--victory">
         <div class="victory-badge" aria-hidden="true">✓</div>
-        <p class="eyebrow">PROTOCOLO CONCLUÍDO</p>
-        <h2 id="victory-title">Linha reativada!</h2>
-        <p id="victory-phase" class="victory-phase"></p>
-        <p class="modal__text">Você posicionou cada pivô e ordenou todos os subarrays.</p>
+        <p class="eyebrow">DESAFIO CONCLUÍDO</p>
+        <h2 id="victory-title">Run concluída!</h2>
+        <p id="victory-phase" class="victory-phase">3 FASES FINALIZADAS</p>
+        <p class="modal__text">Sua tentativa foi registrada no ranking da sala.</p>
         <p id="victory-lesson" class="victory-lesson"></p>
-        <p id="victory-array" class="victory-array"></p>
         <div class="victory-stats">
           <span>Pontuação <strong id="victory-score">0</strong></span>
+          <span>Tempo <strong id="victory-time">00:00</strong></span>
           <span>Erros <strong id="victory-errors">0</strong></span>
+          <span>Posição <strong id="victory-rank">—</strong></span>
         </div>
         <div class="victory-actions">
-          <button id="next-phase-button" class="primary-button primary-button--wide" type="button">
-            Próxima fase
-          </button>
           <button id="play-again-button" class="secondary-button primary-button--wide" type="button">
-            Voltar ao menu
+            Jogar novamente
           </button>
         </div>
       </section>
@@ -223,6 +191,7 @@
     <script src="js/ui-controller.js" defer></script>
     <script src="js/renderer.js" defer></script>
     <script src="js/live-session.js" defer></script>
+    <script src="js/run-scoring.js" defer></script>
     <script src="js/game.js" defer></script>
   </body>
 </html>

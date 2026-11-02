@@ -2,6 +2,8 @@
   "use strict";
 
   const players = new Map();
+  const rankings = new Map();
+  const { formatDuration } = namespace.Utils;
   const renderer = new namespace.Renderer(document.querySelector("#spectator-canvas"));
   const spectatorBuffer = new namespace.SpectatorBuffer({
     delayMs: 320,
@@ -22,6 +24,7 @@
     spectatorName: document.querySelector("#spectator-name"),
     spectatorPhase: document.querySelector("#spectator-phase"),
     spectatorScore: document.querySelector("#spectator-score"),
+    spectatorTime: document.querySelector("#spectator-time"),
     spectatorErrors: document.querySelector("#spectator-errors"),
     spectatorWaiting: document.querySelector("#spectator-waiting"),
     closeSpectator: document.querySelector("#close-spectator"),
@@ -49,26 +52,43 @@
   function orderedPlayers() {
     return [...players.values()].sort((a, b) => (
       b.score - a.score
+      || a.timeMs - b.timeMs
       || a.errors - b.errors
       || a.name.localeCompare(b.name, "pt-BR")
     ));
   }
 
+  function orderedRankings() {
+    return [...rankings.values()].sort((a, b) => (
+      Number(b.bestScore !== null) - Number(a.bestScore !== null)
+      || (b.bestScore ?? -1) - (a.bestScore ?? -1)
+      || (a.bestTimeMs ?? Number.POSITIVE_INFINITY) - (b.bestTimeMs ?? Number.POSITIVE_INFINITY)
+      || (a.bestErrors ?? Number.POSITIVE_INFINITY) - (b.bestErrors ?? Number.POSITIVE_INFINITY)
+      || a.name.localeCompare(b.name, "pt-BR")
+    ));
+  }
+
   function render() {
-    const ordered = orderedPlayers();
-    elements.playerCount.textContent = `${ordered.length} ${ordered.length === 1 ? "online" : "online"}`;
-    elements.rankingEmpty.classList.toggle("is-hidden", ordered.length > 0);
-    elements.gamesEmpty.classList.toggle("is-hidden", ordered.length > 0);
-    elements.rankingList.replaceChildren(...ordered.map((player, index) => {
+    const activePlayers = orderedPlayers();
+    const ranking = orderedRankings();
+    const onlineCount = activePlayers.length;
+    elements.playerCount.textContent = `${ranking.length} registrados · ${onlineCount} online`;
+    elements.rankingEmpty.classList.toggle("is-hidden", ranking.length > 0);
+    elements.gamesEmpty.classList.toggle("is-hidden", activePlayers.length > 0);
+    elements.rankingList.replaceChildren(...ranking.map((player, index) => {
       const item = elements.rankingTemplate.content.firstElementChild.cloneNode(true);
       item.querySelector(".ranking-item__position").textContent = index + 1;
       item.querySelector(".ranking-item__name").textContent = player.name;
-      item.querySelector(".ranking-item__phase").textContent = `Fase ${player.phaseNumber}`;
-      item.querySelector(".ranking-item__score").textContent = player.score;
+      item.querySelector(".ranking-item__time").textContent = player.bestTimeMs === null
+        ? "Sem run concluída"
+        : formatDuration(player.bestTimeMs);
+      item.querySelector(".ranking-item__attempts").textContent = `${player.attempts} ${player.attempts === 1 ? "tentativa" : "tentativas"}`;
+      item.querySelector(".ranking-item__score").textContent = player.bestScore ?? "—";
+      item.classList.toggle("is-online", player.online);
       return item;
     }));
 
-    elements.gamesGrid.replaceChildren(...ordered.map((player) => {
+    elements.gamesGrid.replaceChildren(...activePlayers.map((player) => {
       const card = elements.gameTemplate.content.firstElementChild.cloneNode(true);
       card.classList.toggle("is-watched", player.id === selectedPlayerId);
       const status = card.querySelector(".game-card__status");
@@ -80,8 +100,8 @@
       card.querySelector(".game-card__name").textContent = player.name;
       card.querySelector(".game-card__phase").textContent = `Fase ${player.phaseNumber} · ${player.phaseTitle}`;
       card.querySelector(".game-card__score").textContent = player.score;
+      card.querySelector(".game-card__time").textContent = formatDuration(player.timeMs);
       card.querySelector(".game-card__errors").textContent = player.errors;
-      card.querySelector(".game-card__pivot").textContent = player.pivotStrategy === "LAST" ? "Final" : "Início";
       card.querySelector(".watch-button").addEventListener("click", () => watchPlayer(player.id));
       return card;
     }));
@@ -89,6 +109,12 @@
 
   function upsertPlayer(player) {
     players.set(player.id, { ...players.get(player.id), ...player });
+    render();
+  }
+
+  function replaceRanking(entries) {
+    rankings.clear();
+    entries.forEach((entry) => rankings.set(entry.id, entry));
     render();
   }
 
@@ -102,6 +128,7 @@
       JSON.parse(event.data).forEach((player) => players.set(player.id, player));
       render();
     });
+    rosterSource.addEventListener("ranking", (event) => replaceRanking(JSON.parse(event.data)));
     rosterSource.addEventListener("player", (event) => upsertPlayer(JSON.parse(event.data)));
     rosterSource.addEventListener("remove", (event) => {
       const { id } = JSON.parse(event.data);
@@ -148,6 +175,7 @@
       elements.spectatorName.textContent = state.name;
       elements.spectatorPhase.textContent = `${state.phaseNumber} · ${state.phaseTitle}`;
       elements.spectatorScore.textContent = state.score;
+      elements.spectatorTime.textContent = formatDuration(state.timeMs);
       elements.spectatorErrors.textContent = state.errors;
       const frame = hydrateFrame(state.gameState);
       if (frame) {
@@ -183,11 +211,15 @@
 
   elements.refresh.addEventListener("click", async () => {
     try {
-      const response = await fetch("/api/players", { cache: "no-store" });
-      const roster = await response.json();
+      const [playersResponse, rankingResponse] = await Promise.all([
+        fetch("/api/players", { cache: "no-store" }),
+        fetch("/api/ranking", { cache: "no-store" }),
+      ]);
+      const roster = await playersResponse.json();
+      const ranking = await rankingResponse.json();
       players.clear();
       roster.forEach((player) => players.set(player.id, player));
-      render();
+      replaceRanking(ranking);
     } catch {
       setServerState("offline", "Servidor local indisponível");
     }

@@ -27,12 +27,12 @@
             <p class="eyebrow">PLACAR DA TURMA</p>
             <h2 id="ranking-title">Ranking</h2>
           </div>
-          <strong id="player-count" class="counter">0 online</strong>
+          <strong id="player-count" class="counter">0 jogadores</strong>
         </div>
         <ol id="ranking-list" class="ranking-list"></ol>
         <div id="ranking-empty" class="empty-state">
           <span aria-hidden="true">⌁</span>
-          <strong>Nenhum jogador conectado</strong>
+          <strong>Nenhuma run registrada</strong>
           <p>Abra o endereço do jogo nos computadores da sala.</p>
         </div>
       </section>
@@ -63,6 +63,7 @@
         <div class="spectator__meta">
           <span>Fase <strong id="spectator-phase">—</strong></span>
           <span>Pontos <strong id="spectator-score">—</strong></span>
+          <span>Tempo <strong id="spectator-time">—</strong></span>
           <span>Erros <strong id="spectator-errors">—</strong></span>
           <button id="close-spectator" class="secondary-button" type="button">Fechar transmissão</button>
         </div>
@@ -81,7 +82,8 @@
       <li class="ranking-item">
         <span class="ranking-item__position"></span>
         <span class="ranking-item__name"></span>
-        <span class="ranking-item__phase"></span>
+        <span class="ranking-item__time"></span>
+        <span class="ranking-item__attempts"></span>
         <strong class="ranking-item__score"></strong>
       </li>
     </template>
@@ -96,8 +98,8 @@
         <p class="game-card__phase"></p>
         <dl class="game-card__stats">
           <div><dt>Pontos</dt><dd class="game-card__score"></dd></div>
+          <div><dt>Tempo</dt><dd class="game-card__time"></dd></div>
           <div><dt>Erros</dt><dd class="game-card__errors"></dd></div>
-          <div><dt>Pivô</dt><dd class="game-card__pivot"></dd></div>
         </dl>
         <button class="watch-button" type="button">Assistir partida</button>
       </article>

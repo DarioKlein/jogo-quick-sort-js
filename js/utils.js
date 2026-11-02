@@ -19,11 +19,25 @@
     return values.every((value, index) => index === 0 || values[index - 1] <= value);
   }
 
+  function formatDuration(milliseconds) {
+    const totalSeconds = Math.max(0, Math.floor((Number(milliseconds) || 0) / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+
   function roundedRect(context, x, y, width, height, radius) {
     const safeRadius = Math.min(radius, width / 2, height / 2);
     context.beginPath();
     context.roundRect(x, y, width, height, safeRadius);
   }
 
-  namespace.Utils = Object.freeze({ clamp, lerp, easeInOutCubic, isSorted, roundedRect });
+  namespace.Utils = Object.freeze({
+    clamp,
+    lerp,
+    easeInOutCubic,
+    isSorted,
+    formatDuration,
+    roundedRect,
+  });
 })(window.SortFactory || (window.SortFactory = {}));

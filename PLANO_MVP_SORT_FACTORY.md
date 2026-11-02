@@ -2,7 +2,7 @@
 
 ## 1. Visão geral
 
-**SORT FACTORY** será um jogo educativo 2D de puzzle e movimentação, executado diretamente no navegador. O jogador controla um pequeno robô em uma fábrica e precisa organizar caixas numeradas aplicando corretamente o algoritmo **Quick Sort clássico**, podendo escolher o **primeiro ou o último elemento de cada subarray como pivô** antes da missão.
+**SORT FACTORY** será um jogo educativo 2D de puzzle e movimentação, executado diretamente no navegador. O jogador controla um pequeno robô em uma fábrica e precisa organizar caixas numeradas aplicando corretamente o algoritmo **Quick Sort clássico**, usando sempre o **primeiro elemento de cada subarray como pivô**.
 
 O objetivo não é apresentar o algoritmo como um questionário ou como uma animação passiva. O Quick Sort será a própria mecânica do jogo: o jogador caminhará pelo cenário, inspecionará caixas, acompanhará os ponteiros `i` e `j`, realizará trocas físicas, posicionará o pivô e continuará o processo nos subarrays gerados até que todas as caixas estejam ordenadas.
 
@@ -62,7 +62,7 @@ O projeto será desenvolvido com:
 
 O projeto será entregue em uma pasta e iniciado com `npm start`. O terminal exibirá o endereço local do jogo, o endereço do painel do apresentador e os endereços disponíveis na rede da sala.
 
-O progresso existirá apenas durante a sessão atual. Não haverá conta, banco de dados ou serviço online: nomes, pontuações e partidas permanecerão somente na memória do processo e desaparecerão quando o servidor for encerrado.
+O progresso existirá apenas durante a execução atual do servidor. Não haverá conta, banco de dados ou serviço online: partidas permanecerão na memória e nomes e melhores runs serão espelhados em um JSON local recriado vazio a cada inicialização.
 
 ---
 
@@ -117,10 +117,10 @@ O jogo terá três fases didáticas. A primeira preserva o vetor originalmente p
 As fases serão:
 
 1. **Caso médio:** partições irregulares, representando o comportamento esperado `O(n log n)`;
-2. **Melhor caso:** vetores adaptados à extremidade escolhida, produzindo divisões tão equilibradas quanto possível e custo `O(n log n)`;
+2. **Melhor caso:** vetor preparado para produzir divisões tão equilibradas quanto possível e custo `O(n log n)`;
 3. **Pior caso:** vetor ordenado `[1, 2, 3, 4, 5, 6]`, que com pivô em uma extremidade produz partições de tamanho `n−1` e custo `O(n²)`.
 
-O menu inicial permitirá selecionar qualquer fase. Após uma vitória, também será possível avançar diretamente para a próxima mantendo a estratégia de pivô.
+As fases serão executadas automaticamente na ordem caso médio, melhor caso e pior caso, formando uma única run cronometrada.
 
 Ele é curto o suficiente para uma primeira experiência e demonstra os principais comportamentos da partição:
 
@@ -142,9 +142,7 @@ O resultado final esperado será:
 
 ## 8. Variante exata do Quick Sort
 
-Para evitar ambiguidades, o jogo usará uma partição com dois ponteiros e oferecerá duas variantes espelhadas no menu inicial.
-
-### Pivô no início
+Para evitar ambiguidades, o jogo usará uma partição com dois ponteiros e pivô sempre no início.
 
 Para um subarray delimitado pelos índices `início` e `fim`:
 
@@ -183,38 +181,6 @@ enquanto verdadeiro:
 trocar vetor[início] com vetor[j]
 ```
 
-### Pivô no final
-
-Na variante espelhada:
-
-1. o pivô será o valor em `fim`;
-2. `i` começará em `início`;
-3. `j` começará em `fim - 1`;
-4. as regras de comparação permanecem iguais;
-5. após o cruzamento, o pivô será trocado com a posição `i`.
-
-```text
-pivô = vetor[fim]
-i = início
-j = fim - 1
-
-enquanto verdadeiro:
-    enquanto i < fim e vetor[i] <= pivô:
-        i avança
-
-    enquanto j >= início e vetor[j] > pivô:
-        j recua
-
-    se i >= j:
-        encerrar a busca
-
-    trocar vetor[i] com vetor[j]
-    i avança
-    j recua
-
-trocar vetor[fim] com vetor[i]
-```
-
 Subarrays com zero ou um elemento já serão considerados ordenados e não exigirão uma partição jogável.
 
 ---
@@ -224,7 +190,7 @@ Subarrays com zero ou um elemento já serão considerados ordenados e não exigi
 Cada partição será transformada em uma sequência de ações físicas:
 
 1. o jogo destaca o subarray ativo;
-2. a primeira ou a última caixa recebe o marcador visual de **PIVÔ**, conforme a escolha inicial;
+2. a primeira caixa recebe o marcador visual de **PIVÔ**;
 3. os ponteiros `i` e `j` aparecem sobre suas posições iniciais;
 4. o jogador caminha até a caixa apontada por `i` e a inspeciona;
 5. se o valor puder continuar no lado esquerdo, `i` avança;
@@ -305,7 +271,7 @@ A ordem de seleção não importará: será possível selecionar primeiro `i` ou
 
 ### Colocação do pivô
 
-Após o cruzamento dos ponteiros, o HUD solicitará a troca do pivô com a posição `j`, para pivô no início, ou com a posição `i`, para pivô no final. Essa ação usará a mesma mecânica de selecionar duas caixas.
+Após o cruzamento dos ponteiros, o HUD solicitará a troca do pivô com a posição `j`. Essa ação usará a mesma mecânica de selecionar duas caixas.
 
 Depois da troca, o pivô receberá um selo verde ou trava luminosa indicando que sua posição é definitiva.
 
@@ -369,7 +335,7 @@ O tutorial será dividido em telas simples:
 
 1. **Missão:** ordenar as caixas para reativar a fábrica;
 2. **Movimento:** usar WASD ou setas;
-3. **Pivô:** a caixa no início ou no final do trecho será o pivô, conforme a escolha feita no menu;
+3. **Pivô:** a caixa no início do trecho será sempre o pivô;
 4. **Ponteiros:** `i` procura um número grande demais para a esquerda e `j` procura um número que pode ir para a esquerda;
 5. **Interação:** usar `E` ou `Espaço` perto das caixas;
 6. **Conclusão:** posicionar cada pivô e continuar nos subarrays.
@@ -743,18 +709,18 @@ O MVP será considerado concluído quando todos os itens abaixo estiverem funcio
 - [ ] o personagem se move com WASD e setas;
 - [ ] as seis caixas aparecem em posições físicas;
 - [ ] o número de cada caixa permanece legível;
-- [ ] um menu inicial permite escolher o pivô no início ou no final;
-- [ ] o menu permite selecionar caso médio, melhor caso ou pior caso;
-- [ ] a vitória permite avançar para a próxima fase mantendo o pivô escolhido;
+- [ ] o menu inicial solicita apenas um nome único para o jogador;
+- [ ] as fases caso médio, melhor caso e pior caso acontecem automaticamente em sequência;
+- [ ] a run acumula pontuação, erros e tempo entre as fases;
 - [ ] cada fase explica o comportamento e a complexidade demonstrados;
-- [ ] a extremidade escolhida do subarray atual é sempre marcada como pivô;
+- [ ] o início do subarray atual é sempre marcado como pivô;
 - [ ] os ponteiros `i` e `j` aparecem e mudam de posição corretamente;
 - [ ] o jogador precisa se aproximar das caixas para interagir;
 - [ ] as inspeções aplicam as comparações corretas;
 - [ ] trocas corretas são aceitas e animadas;
 - [ ] trocas incorretas são recusadas com explicação;
 - [ ] o cruzamento dos ponteiros é detectado;
-- [ ] o pivô é colocado na posição `j` na variante inicial ou em `i` na variante final;
+- [ ] o pivô é colocado na posição `j`;
 - [ ] os subarrays seguintes são processados;
 - [ ] subarrays de tamanho zero ou um são resolvidos automaticamente;
 - [ ] a partida chega ao vetor ordenado esperado;
