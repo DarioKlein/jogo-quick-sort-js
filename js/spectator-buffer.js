@@ -2,13 +2,22 @@
   "use strict";
 
   const { clamp, lerp } = namespace.Utils;
-  const DEFAULT_DELAY_MS = 120;
-  const DEFAULT_MAX_FRAMES = 24;
+  const DEFAULT_DELAY_MS = 320;
+  const DEFAULT_MAX_DELAY_MS = 700;
+  const DEFAULT_MAX_FRAMES = 48;
   const TELEPORT_DISTANCE = 100;
+  const JITTER_WEIGHT = 0.25;
+  const DELAY_RECOVERY_WEIGHT = 0.04;
+  const MAX_PLAYBACK_RATE_CORRECTION = 0.1;
 
   class SpectatorBuffer {
-    constructor({ delayMs = DEFAULT_DELAY_MS, maxFrames = DEFAULT_MAX_FRAMES } = {}) {
-      this.delayMs = delayMs;
+    constructor({
+      delayMs = DEFAULT_DELAY_MS,
+      maxDelayMs = DEFAULT_MAX_DELAY_MS,
+      maxFrames = DEFAULT_MAX_FRAMES,
+    } = {}) {
+      this.minimumDelayMs = delayMs;
+      this.maximumDelayMs = Math.max(delayMs, maxDelayMs);
       this.maxFrames = maxFrames;
       this.reset();
     }
@@ -17,10 +26,19 @@
       return this.frames.length;
     }
 
+    get delayMs() {
+      return this.adaptiveDelayMs;
+    }
+
     reset() {
       this.frames = [];
       this.lastSequence = -1;
       this.clockOffset = null;
+      this.jitterMs = 0;
+      this.adaptiveDelayMs = this.minimumDelayMs;
+      this.lastArrival = null;
+      this.playbackTime = null;
+      this.lastSampleAt = null;
     }
 
     push(frame, { serverTime, sequence, receivedAt = performance.now() }) {
@@ -32,6 +50,23 @@
       this.clockOffset = this.clockOffset === null
         ? measuredOffset
         : Math.min(this.clockOffset, measuredOffset);
+
+      if (this.lastArrival) {
+        const serverGap = Math.max(0, serverTime - this.lastArrival.serverTime);
+        const arrivalGap = Math.max(0, receivedAt - this.lastArrival.receivedAt);
+        const variation = Math.abs(arrivalGap - serverGap);
+        this.jitterMs = lerp(this.jitterMs, variation, JITTER_WEIGHT);
+        const desiredDelay = clamp(
+          this.minimumDelayMs + this.jitterMs * 3,
+          this.minimumDelayMs,
+          this.maximumDelayMs,
+        );
+        this.adaptiveDelayMs = desiredDelay > this.adaptiveDelayMs
+          ? desiredDelay
+          : lerp(this.adaptiveDelayMs, desiredDelay, DELAY_RECOVERY_WEIGHT);
+      }
+      this.lastArrival = { serverTime, receivedAt };
+
       this.frames.push({ frame, serverTime, sequence });
       if (this.frames.length > this.maxFrames) {
         this.frames.splice(0, this.frames.length - this.maxFrames);
@@ -43,7 +78,21 @@
       if (this.frames.length === 0) return null;
       if (this.frames.length === 1 || this.clockOffset === null) return this.frames[0].frame;
 
-      const targetTime = now - this.clockOffset - this.delayMs;
+      const desiredTime = now - this.clockOffset - this.adaptiveDelayMs;
+      if (this.playbackTime === null || this.lastSampleAt === null) {
+        this.playbackTime = Math.min(desiredTime, this.frames.at(-1).serverTime);
+      } else {
+        const elapsed = clamp(now - this.lastSampleAt, 0, 100);
+        const drift = desiredTime - this.playbackTime;
+        const correctionLimit = elapsed * MAX_PLAYBACK_RATE_CORRECTION;
+        const advance = Math.max(0, elapsed + clamp(drift, -correctionLimit, correctionLimit));
+        this.playbackTime = Math.min(
+          this.playbackTime + advance,
+          this.frames.at(-1).serverTime,
+        );
+      }
+      this.lastSampleAt = now;
+      const targetTime = this.playbackTime;
       while (this.frames.length > 2 && this.frames[1].serverTime <= targetTime) {
         this.frames.shift();
       }

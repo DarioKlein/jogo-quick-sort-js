@@ -3,7 +3,11 @@
 
   const players = new Map();
   const renderer = new namespace.Renderer(document.querySelector("#spectator-canvas"));
-  const spectatorBuffer = new namespace.SpectatorBuffer({ delayMs: 120 });
+  const spectatorBuffer = new namespace.SpectatorBuffer({
+    delayMs: 320,
+    maxDelayMs: 700,
+    maxFrames: 48,
+  });
   const elements = {
     serverState: document.querySelector("#server-state"),
     playerCount: document.querySelector("#player-count"),

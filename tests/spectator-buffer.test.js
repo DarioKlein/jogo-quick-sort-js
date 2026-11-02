@@ -36,6 +36,20 @@ assert.equal(interpolated.manualSwap.phaseProgress, 0.4);
 const latest = buffer.sample(5300);
 assert.equal(latest.robot.x, 10, "sem quadro futuro, deve manter o último estado conhecido");
 
+const adaptiveBuffer = new SpectatorBuffer({ delayMs: 100, maxDelayMs: 500 });
+adaptiveBuffer.push(frame(0), { serverTime: 1000, sequence: 1, receivedAt: 5000 });
+adaptiveBuffer.push(frame(5), { serverTime: 1050, sequence: 2, receivedAt: 5050 });
+assert.equal(adaptiveBuffer.delayMs, 100, "uma conexão estável mantém o atraso mínimo");
+adaptiveBuffer.push(frame(10), { serverTime: 1100, sequence: 3, receivedAt: 5300 });
+assert.ok(adaptiveBuffer.delayMs > 100, "oscilações de chegada devem aumentar o buffer");
+
+const beforeAdjustment = adaptiveBuffer.sample(5350).robot.x;
+const afterAdjustment = adaptiveBuffer.sample(5367).robot.x;
+assert.ok(
+  afterAdjustment >= beforeAdjustment,
+  "o relógio adaptativo nunca deve fazer a reprodução voltar no tempo",
+);
+
 const teleportBuffer = new SpectatorBuffer({ delayMs: 100 });
 teleportBuffer.push(frame(0), { serverTime: 1000, sequence: 1, receivedAt: 5000 });
 teleportBuffer.push(frame(300), { serverTime: 1100, sequence: 2, receivedAt: 5100 });
@@ -49,4 +63,4 @@ teleportBuffer.reset();
 assert.equal(teleportBuffer.size, 0);
 assert.equal(teleportBuffer.sample(6000), null);
 
-console.log("✓ SpectatorBuffer: atraso fixo, interpolação, ordem e transições sem recuo");
+console.log("✓ SpectatorBuffer: atraso adaptativo, interpolação, ordem e reprodução sem recuo");

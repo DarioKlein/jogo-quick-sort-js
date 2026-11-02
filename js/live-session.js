@@ -14,6 +14,7 @@
       this.sendTimer = null;
       this.heartbeatTimer = null;
       this.lastSentAt = 0;
+      this.lastCollectedAt = Number.NEGATIVE_INFINITY;
       this.sending = false;
       this.hasSpectators = false;
       this.connectionState = "offline";
@@ -43,6 +44,14 @@
         if (this.latestPayload) this.publish(this.latestPayload, true);
       }, HEARTBEAT_INTERVAL_MS);
       return result;
+    }
+
+    shouldCollectFrame(now = performance.now()) {
+      if (!this.playerId) return false;
+      const interval = this.hasSpectators ? SPECTATED_INTERVAL_MS : BACKGROUND_INTERVAL_MS;
+      if (now - this.lastCollectedAt < interval) return false;
+      this.lastCollectedAt = now;
+      return true;
     }
 
     publish(payload, force = false) {

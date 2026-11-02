@@ -24,6 +24,11 @@ Rede da sala: http://192.168.0.15:3000
 Ao encerrar o servidor, nomes, pontuações e partidas desaparecem. Nenhuma informação é gravada em
 arquivo ou banco de dados.
 
+A transmissão prioriza o desempenho de quem está jogando: o cliente envia no máximo 20 estados por
+segundo quando é assistido. O painel reproduz esses estados em 60 FPS com um buffer adaptativo de
+aproximadamente 320 a 700 ms, aceitando atraso adicional para absorver oscilações da rede sem aumentar
+o trabalho no computador do jogador.
+
 Chrome/Chromium, Edge e Firefox recentes são suportados.
 
 ## Controles

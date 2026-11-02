@@ -298,7 +298,7 @@
     }
 
     _publishLiveState(time, snapshot, manualSwap) {
-      if (!this.liveSession.playerId) return;
+      if (!this.liveSession.shouldCollectFrame(time)) return;
       let status = "jogando";
       if (this.victoryShown || snapshot.state === GameState.VICTORY) {
         status = "concluido";

@@ -12,19 +12,23 @@ require(path.join(__dirname, "..", "js", "renderer.js"));
 
 function createContextStub() {
   const noop = () => {};
-  return new Proxy({}, {
-    get(_target, property) {
+  const assignments = [];
+  return new Proxy({ assignments }, {
+    get(target, property) {
+      if (property === "assignments") return target.assignments;
       if (property === "createLinearGradient") return () => ({ addColorStop: noop });
       if (property === "measureText") return (text) => ({ width: String(text).length * 8 });
       return noop;
     },
-    set() {
+    set(target, property, value) {
+      target.assignments.push({ property, value });
       return true;
     },
   });
 }
 
-const canvas = { getContext: () => createContextStub() };
+const context = createContextStub();
+const canvas = { getContext: () => context };
 const renderer = new global.SortFactory.Renderer(canvas);
 const { GameState, PivotStrategy } = global.SortFactory.Constants;
 const baseSnapshot = {
@@ -90,5 +94,11 @@ assert.doesNotThrow(() => draw({
   state: GameState.PLACE_PIVOT,
   selected: 0,
 }, { a: 0, b: 0, phase: "placing", phaseProgress: 0.5 }, 3000));
+
+assert.equal(
+  context.assignments.some(({ property }) => property === "filter"),
+  false,
+  "caixas bloqueadas não devem usar filtros de Canvas custosos",
+);
 
 console.log("✓ Renderer: zonas ativas/bloqueadas, caixa carregada e troca manual");

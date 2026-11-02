@@ -17,12 +17,13 @@
   class Renderer {
     constructor(canvas) {
       this.canvas = canvas;
-      this.context = canvas.getContext("2d");
+      this.context = canvas.getContext("2d", { alpha: false });
       this.pointerPositions = { i: BOX_START_X, j: BOX_START_X };
       this.particles = [];
       this.lastSelectedIndex = null;
       this.pickupStartedAt = 0;
       this.lastTime = performance.now();
+      this.lockedPattern = this._createLockedPattern();
     }
 
     boxX(index) {
@@ -98,6 +99,30 @@
     resetEffects() {
       this.particles = [];
       this.lastSelectedIndex = null;
+    }
+
+    _createLockedPattern() {
+      const documentRef = this.canvas.ownerDocument
+        ?? (typeof document !== "undefined" ? document : null);
+      if (!documentRef?.createElement || typeof this.context.createPattern !== "function") {
+        return null;
+      }
+
+      const tile = documentRef.createElement("canvas");
+      tile.width = 34;
+      tile.height = 34;
+      const tileContext = tile.getContext("2d");
+      if (!tileContext) return null;
+
+      tileContext.strokeStyle = "rgba(116,145,151,.16)";
+      tileContext.lineWidth = 8;
+      tileContext.beginPath();
+      tileContext.moveTo(-8, 34);
+      tileContext.lineTo(34, -8);
+      tileContext.moveTo(26, 42);
+      tileContext.lineTo(42, 26);
+      tileContext.stroke();
+      return this.context.createPattern(tile, "repeat");
     }
 
     _drawBackground(now) {
@@ -253,13 +278,9 @@
         context.clip();
         context.fillStyle = "rgba(1,10,14,.68)";
         context.fillRect(startX, 188, width, 350);
-        context.strokeStyle = "rgba(116,145,151,.16)";
-        context.lineWidth = 8;
-        for (let x = startX - 360; x < endX + 360; x += 34) {
-          context.beginPath();
-          context.moveTo(x, 538);
-          context.lineTo(x + 270, 188);
-          context.stroke();
+        if (this.lockedPattern) {
+          context.fillStyle = this.lockedPattern;
+          context.fillRect(startX, 188, width, 350);
         }
         context.restore();
 
@@ -444,8 +465,9 @@
 
       context.save();
       if (locked) {
-        context.globalAlpha = 0.24;
-        context.filter = "grayscale(75%)";
+        // CanvasRenderingContext2D.filter pode cair em software em GPUs integradas.
+        // A paleta dessaturada mantém o efeito sem filtrar cada caixa a cada frame.
+        context.globalAlpha = 0.48;
       }
       context.shadowBlur = 0;
       if (resolved) {
@@ -460,17 +482,21 @@
       }
 
       const crateGradient = context.createLinearGradient(x - half, y - half, x + half, y + half);
-      crateGradient.addColorStop(0, resolved ? "#1c6146" : "#77541c");
-      crateGradient.addColorStop(0.18, resolved ? "#267a59" : "#9b7129");
-      crateGradient.addColorStop(1, resolved ? "#133d31" : "#4a351a");
+      crateGradient.addColorStop(0, locked ? "#33474b" : resolved ? "#1c6146" : "#77541c");
+      crateGradient.addColorStop(0.18, locked ? "#496065" : resolved ? "#267a59" : "#9b7129");
+      crateGradient.addColorStop(1, locked ? "#24363a" : resolved ? "#133d31" : "#4a351a");
       context.fillStyle = crateGradient;
-      context.strokeStyle = resolved ? COLORS.green : isPivot ? COLORS.gold : "#c28d35";
+      context.strokeStyle = locked
+        ? "#78949a"
+        : resolved ? COLORS.green : isPivot ? COLORS.gold : "#c28d35";
       context.lineWidth = isPivot || resolved ? 4 : 2;
       roundedRect(context, x - half, y - half, BOX_SIZE, BOX_SIZE, 8);
       context.fill();
       context.stroke();
 
-      context.strokeStyle = resolved ? "rgba(101,237,154,.38)" : "rgba(255,220,145,.32)";
+      context.strokeStyle = locked
+        ? "rgba(174,198,203,.28)"
+        : resolved ? "rgba(101,237,154,.38)" : "rgba(255,220,145,.32)";
       context.lineWidth = 6;
       context.strokeRect(x - half + 13, y - half + 13, BOX_SIZE - 26, BOX_SIZE - 26);
       context.beginPath();
@@ -484,7 +510,7 @@
       context.beginPath();
       context.arc(x, y, 27, 0, Math.PI * 2);
       context.fill();
-      context.fillStyle = "#ffffff";
+      context.fillStyle = locked ? "#d0dcde" : "#ffffff";
       context.font = "900 31px Bahnschrift, Segoe UI";
       context.textAlign = "center";
       context.textBaseline = "middle";
