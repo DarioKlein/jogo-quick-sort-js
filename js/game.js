@@ -350,7 +350,7 @@
         this.ui.setPlayerName(player.name);
         this.ui.hideResumePrompt();
         this.ui.hideStartMenu();
-        this._beginRun(true);
+        this._beginRun(false);
         this.ui.showStatus("Sessão recuperada. Uma nova run foi preparada.");
       } catch (error) {
         this.ui.showResumeError(error.message || "Não foi possível recuperar a sessão.");

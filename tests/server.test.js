@@ -132,6 +132,27 @@ async function run() {
     assert.equal(resumed.body.id, playerId, "recuperação deve preservar o mesmo card da sessão");
     assert.equal((await requestJson(`${baseUrl}/api/players`)).body[0].status, "menu");
 
+    const internalPlayer = server.sortFactoryState.players.get(playerId);
+    internalPlayer.lastSeen = Date.now() - 16_000;
+    server.sortFactoryState.cleanupPlayers();
+    assert.equal(
+      (await requestJson(`${baseUrl}/api/players`)).body[0].status,
+      "reconectando",
+      "perda temporária de atualizações deve preservar a sessão para recuperação",
+    );
+    assert.equal(internalPlayer.autoSuspended, true);
+    assert.ok(internalPlayer.reconnectUntil > Date.now());
+
+    const automaticRecovery = await requestJson(`${baseUrl}/api/players/${playerId}/state`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "pausado", score: 3000 }),
+    });
+    assert.equal(automaticRecovery.response.status, 200);
+    assert.equal(internalPlayer.reconnectUntil, null);
+    assert.equal(internalPlayer.autoSuspended, false);
+    assert.equal((await requestJson(`${baseUrl}/api/players`)).body[0].status, "pausado");
+
     rosterStream = await openEventStream(`${baseUrl}/api/events`);
     const initialRoster = await rosterStream.nextEvent("roster");
     assert.equal(initialRoster[0].name, "Maria");

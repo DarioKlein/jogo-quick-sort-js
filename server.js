@@ -295,6 +295,7 @@ function createSortFactoryServer({
       const now = Date.now();
       player.reconnectUntil = null;
       player.statusBeforeSuspend = null;
+      player.autoSuspended = false;
       player.status = "menu";
       player.score = 0;
       player.errors = 0;
@@ -430,6 +431,7 @@ function createSortFactoryServer({
         lastRosterBroadcast: 0,
         reconnectUntil: null,
         statusBeforeSuspend: null,
+        autoSuspended: false,
       };
       players.set(player.id, player);
       broadcastRosterPlayer(player);
@@ -467,6 +469,7 @@ function createSortFactoryServer({
       if (player.status !== "reconectando") player.statusBeforeSuspend = player.status;
       player.status = "reconectando";
       player.reconnectUntil = now + PLAYER_RECONNECT_TIMEOUT_MS;
+      player.autoSuspended = false;
       player.updatedAt = now;
       player.lastSeen = now;
       broadcastRosterPlayer(player);
@@ -527,6 +530,11 @@ function createSortFactoryServer({
     if (request.method === "POST" && playerMatch[2] === "state") {
       const body = await readJson(request);
       const now = Date.now();
+      if (player.autoSuspended && player.reconnectUntil > now) {
+        player.reconnectUntil = null;
+        player.statusBeforeSuspend = null;
+        player.autoSuspended = false;
+      }
       const suspended = player.reconnectUntil > now;
       player.score = toSafeInteger(body.score, player.score);
       player.errors = Math.max(0, toSafeInteger(body.errors, player.errors));
@@ -609,15 +617,28 @@ function createSortFactoryServer({
     }
   });
 
-  const cleanupInterval = setInterval(() => {
-    const limit = Date.now() - PLAYER_TIMEOUT_MS;
-    const now = Date.now();
+  function cleanupPlayers(now = Date.now()) {
+    const limit = now - PLAYER_TIMEOUT_MS;
     players.forEach((player) => {
       const reconnectExpired = player.reconnectUntil && player.reconnectUntil < now;
       const regularTimeout = !player.reconnectUntil && player.lastSeen < limit;
-      if (reconnectExpired || regularTimeout) removePlayer(player.id, "timeout");
+      if (reconnectExpired) {
+        removePlayer(player.id, "timeout");
+        return;
+      }
+      if (!regularTimeout) return;
+
+      if (player.status !== "reconectando") player.statusBeforeSuspend = player.status;
+      player.status = "reconectando";
+      player.reconnectUntil = now + PLAYER_RECONNECT_TIMEOUT_MS;
+      player.autoSuspended = true;
+      player.updatedAt = now;
+      broadcastRosterPlayer(player);
+      broadcastPlayerState(player);
     });
-  }, 3_000);
+  }
+
+  const cleanupInterval = setInterval(cleanupPlayers, 3_000);
   cleanupInterval.unref?.();
 
   const heartbeatInterval = setInterval(() => {
@@ -636,7 +657,7 @@ function createSortFactoryServer({
     watchClients.forEach((clients) => clients.forEach((client) => client.end()));
   });
 
-  server.sortFactoryState = { players, rankings, removePlayer, rankingFile };
+  server.sortFactoryState = { players, rankings, removePlayer, cleanupPlayers, rankingFile };
   return server;
 }
 
