@@ -43,7 +43,9 @@ Chrome/Chromium, Edge e Firefox recentes são suportados.
 - `W`, `A`, `S`, `D` ou setas: movimentar o robô;
 - `Shift`: correr enquanto se movimenta;
 - `E` ou `Espaço`: inspecionar ou selecionar a caixa próxima;
+- `P`: pausar ou continuar a run;
 - `Esc`: fechar o tutorial;
+- `F` ou **Tela cheia**: alternar entre tela cheia e a janela normal; `Esc` também encerra a tela cheia;
 - **Como jogar**: reabrir o tutorial;
 - **Reiniciar run**: zerar a tentativa atual e voltar ao caso médio.
 
