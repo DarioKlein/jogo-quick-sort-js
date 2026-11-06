@@ -114,9 +114,29 @@ assert.notEqual(runningMotion.step, 0);
 assert.equal(actionMotion.walking, false, "posicionar a caixa deve omitir a caminhada");
 assert.equal(actionMotion.step, 0);
 
+renderer.robotPose = { side: 0, back: 0, lastTime: null };
+const frontPose = renderer._getRobotPose(robot, 4000, false);
+renderer._getRobotPose(runningRobot, 4016, false);
+const sidePose = renderer._getRobotPose(runningRobot, 4200, false);
+renderer._getRobotPose(runningRobot, 4216, true);
+const backPose = renderer._getRobotPose(runningRobot, 4400, true);
+renderer._getRobotPose(robot, 4416, false);
+const returnedFrontPose = renderer._getRobotPose(robot, 4600, false);
+assert.deepEqual(frontPose, { side: 0, back: 0 });
+assert.equal(sidePose.side, 1, "robô em movimento deve assumir o perfil lateral");
+assert.equal(sidePose.back, 0);
+assert.equal(backPose.back, 1, "robô interagindo deve ficar de costas para olhar as caixas");
+assert.equal(backPose.side, 0);
+assert.deepEqual(returnedFrontPose, { side: 0, back: 0 });
+renderer.robotPose = { side: 0, back: 0, lastTime: null };
+
 const suppressedPhases = [];
+const actionGripPoses = [];
 const drawRobot = renderer._drawRobot.bind(renderer);
-renderer._drawRobot = (...args) => suppressedPhases.push(args[4]);
+renderer._drawRobot = (...args) => {
+  suppressedPhases.push(args[4]);
+  actionGripPoses.push(args[5]);
+};
 draw({ ...baseSnapshot, state: GameState.SWAP_I_J }, {
   a: 1,
   b: 4,
@@ -135,6 +155,16 @@ assert.deepEqual(
   [true, true],
   "trocar e posicionar caixas devem congelar as pernas",
 );
+assert.ok(
+  actionGripPoses.every((pose) => pose && Number.isFinite(pose.x) && Number.isFinite(pose.y)),
+  "braços devem acompanhar a caixa durante a troca e o posicionamento",
+);
+assert.doesNotThrow(() => renderer._drawReachingArms(
+  { ...robot, facing: -1 },
+  robot.y,
+  0,
+  { x: robot.x - 20, y: robot.y - 124, reach: 1, grip: 1 },
+));
 
 context.assignments.length = 0;
 renderer._drawRobot(runningRobot, 3500, false);

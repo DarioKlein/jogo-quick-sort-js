@@ -15,6 +15,10 @@
       : 1 - Math.pow(-2 * value + 2, 3) / 2;
   }
 
+  function easeOutCubic(value) {
+    return 1 - Math.pow(1 - value, 3);
+  }
+
   function isSorted(values) {
     return values.every((value, index) => index === 0 || values[index - 1] <= value);
   }
@@ -36,6 +40,7 @@
     clamp,
     lerp,
     easeInOutCubic,
+    easeOutCubic,
     isSorted,
     formatDuration,
     roundedRect,
