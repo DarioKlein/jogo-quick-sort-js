@@ -18,9 +18,10 @@
     PHASES,
   } = namespace.Constants;
   const { clamp } = namespace.Utils;
-  const { calculateRunStats } = namespace.RunScoring;
+  const { calculatePlayableTime, calculateRunStats } = namespace.RunScoring;
 
-  const PHASE_TRANSITION_MS = 1100;
+  const PHASE_TRANSITION_MS = 1900;
+  const PHASE_ENTRANCE_MS = 1800;
 
   class SortFactoryGame {
     constructor() {
@@ -51,6 +52,10 @@
       this.completedErrors = 0;
       this.runSerial = 0;
       this.phaseTransitionTimer = null;
+      this.phaseEntranceStartedAt = null;
+      this.phaseEntranceEndsAt = null;
+      this.phaseEntrancePending = false;
+      this.phaseDowntimeStartedAt = null;
       this.lastFrameTime = performance.now();
       this.lastHudUpdate = Number.NEGATIVE_INFINITY;
       this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -76,7 +81,12 @@
     }
 
     togglePause() {
-      if (!this.liveSession.playerId || this.modalOpen || this.victoryShown) return;
+      if (
+        !this.liveSession.playerId
+        || this.modalOpen
+        || this.victoryShown
+        || this.phaseEntranceEndsAt !== null
+      ) return;
       if (this.paused) {
         this._resumePause(true);
         return;
@@ -86,7 +96,12 @@
     }
 
     _beginPause(manual = false) {
-      if (!this.paused && this.runStartedAt !== null) {
+      if (
+        !this.paused
+        && this.runStartedAt !== null
+        && this.phaseDowntimeStartedAt === null
+        && this.phaseEntranceEndsAt === null
+      ) {
         this.pauseStartedAt = performance.now();
       }
       this.paused = true;
@@ -103,7 +118,9 @@
       }
       this.paused = false;
       this.manualPaused = false;
-      this.input.enabled = !this.modalOpen && !this.victoryShown;
+      this.input.enabled = !this.modalOpen
+        && !this.victoryShown
+        && this.phaseEntranceEndsAt === null;
       this.lastFrameTime = performance.now();
       this.ui.setPaused(false);
       if (focusCanvas) this.canvas.focus();
@@ -112,11 +129,19 @@
     _bindEvents() {
       this.ui.onTutorialVisibilityChange = (isOpen) => {
         this.modalOpen = isOpen;
-        this.input.enabled = !isOpen && !this.victoryShown && !this.paused;
+        this.input.enabled = !isOpen
+          && !this.victoryShown
+          && !this.paused
+          && this.phaseEntranceEndsAt === null
+          && !this.phaseEntrancePending;
         this.input.clear();
         if (!isOpen && !this.paused) {
-          this._ensureRunStarted();
-          this.canvas.focus();
+          if (this.phaseEntrancePending) {
+            this._beginPhaseEntrance();
+          } else {
+            this._ensureRunStarted();
+            this.canvas.focus();
+          }
         }
       };
       this.ui.onMenuVisibilityChange = (isOpen) => {
@@ -139,7 +164,7 @@
       this.ui.onPlayAgain = () => this._beginRun(false);
 
       window.addEventListener("blur", () => {
-        if (!this.modalOpen && !this.victoryShown) {
+        if (!this.modalOpen && !this.victoryShown && this.phaseEntranceEndsAt === null) {
           this._beginPause(false);
         }
       });
@@ -155,7 +180,12 @@
         }
       });
       document.addEventListener("visibilitychange", () => {
-        if (document.hidden && !this.modalOpen && !this.victoryShown) {
+        if (
+          document.hidden
+          && !this.modalOpen
+          && !this.victoryShown
+          && this.phaseEntranceEndsAt === null
+        ) {
           this._beginPause(false);
         }
       });
@@ -174,6 +204,7 @@
 
       const nextPhase = this._getNextPhase();
       if (nextPhase) {
+        this.phaseDowntimeStartedAt = performance.now();
         this.ui.showStatus(
           `Fase ${this.currentPhase.number} concluída! Preparando ${nextPhase.title.toLowerCase()}…`,
           false,
@@ -194,8 +225,14 @@
     _frame(time) {
       const delta = Math.min((time - this.lastFrameTime) / 1000, 0.05);
       this.lastFrameTime = time;
+      this._completePhaseEntrance(time);
 
-      if (!this.paused && !this.modalOpen && !this.victoryShown) {
+      if (
+        !this.paused
+        && !this.modalOpen
+        && !this.victoryShown
+        && this.phaseEntranceEndsAt === null
+      ) {
         this._update(delta, time);
       }
 
@@ -230,6 +267,7 @@
         manualPaused: this.manualPaused,
         menuOpen: this.menuOpen,
         victory: snapshot.state === GameState.VICTORY,
+        boxEntranceProgress: this._getPhaseEntranceProgress(time),
       });
 
       this._publishLiveState(time, snapshot, manualSwapForFrame, run);
@@ -433,6 +471,10 @@
       this.runFinishedAt = null;
       this.runCompleted = false;
       this.phaseCommitted = false;
+      this.phaseEntranceStartedAt = null;
+      this.phaseEntranceEndsAt = null;
+      this.phaseEntrancePending = false;
+      this.phaseDowntimeStartedAt = null;
       this.completedScoreDelta = 0;
       this.completedErrors = 0;
       this.manualSwap = null;
@@ -456,7 +498,7 @@
     _beginRun(showTutorial) {
       window.clearTimeout(this.phaseTransitionTimer);
       this.runSerial += 1;
-      this.runStartedAt = showTutorial ? null : performance.now();
+      this.runStartedAt = null;
       this.runFinishedAt = null;
       this.pauseStartedAt = null;
       this.accumulatedPauseMs = 0;
@@ -464,6 +506,10 @@
       this.completedScoreDelta = 0;
       this.completedErrors = 0;
       this.phaseCommitted = false;
+      this.phaseEntranceStartedAt = null;
+      this.phaseEntranceEndsAt = null;
+      this.phaseEntrancePending = false;
+      this.phaseDowntimeStartedAt = null;
       this.modalOpen = showTutorial;
       this.ui.hideVictory();
       this._startPhase(PHASES[0].id, showTutorial);
@@ -475,14 +521,55 @@
       }
     }
 
+    _beginPhaseEntrance(now = performance.now()) {
+      this.phaseEntrancePending = false;
+      this.phaseEntranceStartedAt = now;
+      this.phaseEntranceEndsAt = now + PHASE_ENTRANCE_MS;
+      this.input.enabled = false;
+      this.input.clear();
+      this._stopRobotMotion();
+    }
+
+    _completePhaseEntrance(now = performance.now()) {
+      if (this.phaseEntranceEndsAt === null || now < this.phaseEntranceEndsAt) return;
+
+      if (this.runStartedAt === null) {
+        this.runStartedAt = now;
+      } else if (this.phaseDowntimeStartedAt !== null) {
+        this.accumulatedPauseMs += Math.max(0, now - this.phaseDowntimeStartedAt);
+      }
+
+      this.phaseEntranceStartedAt = null;
+      this.phaseEntranceEndsAt = null;
+      this.phaseDowntimeStartedAt = null;
+      this.input.enabled = !this.modalOpen && !this.victoryShown && !this.paused;
+      if (this.input.enabled) this.canvas.focus();
+    }
+
+    _getPhaseEntranceProgress(now = performance.now()) {
+      if (this.phaseEntranceStartedAt === null || this.phaseEntranceEndsAt === null) return null;
+      return clamp(
+        (now - this.phaseEntranceStartedAt) / PHASE_ENTRANCE_MS,
+        0,
+        1,
+      );
+    }
+
     _getRunStats(snapshot, now = performance.now()) {
       const end = this.runFinishedAt ?? now;
       const activePauseMs = this.pauseStartedAt === null
         ? 0
         : Math.max(0, end - this.pauseStartedAt);
-      const timeMs = this.runStartedAt === null
+      const activePhaseDowntimeMs = this.phaseDowntimeStartedAt === null
         ? 0
-        : Math.max(0, end - this.runStartedAt - this.accumulatedPauseMs - activePauseMs);
+        : Math.max(0, end - this.phaseDowntimeStartedAt);
+      const timeMs = calculatePlayableTime({
+        start: this.runStartedAt,
+        end,
+        pausedMs: this.accumulatedPauseMs,
+        activePauseMs,
+        phaseDowntimeMs: activePhaseDowntimeMs,
+      });
       return calculateRunStats({
         phaseCount: PHASES.length,
         initialPhaseScore: INITIAL_SCORE,
@@ -497,7 +584,7 @@
 
     async _finishRun(snapshot, runSerial) {
       const localResult = this._getRunStats(snapshot, this.runFinishedAt);
-      const delay = new Promise((resolve) => window.setTimeout(resolve, 900));
+      const delay = new Promise((resolve) => window.setTimeout(resolve, 1800));
       let savedResult = {};
       try {
         [savedResult] = await Promise.all([
@@ -553,6 +640,7 @@
           manualPaused: this.manualPaused,
           modalOpen: this.modalOpen || this.victoryShown,
           victory: snapshot.state === GameState.VICTORY,
+          boxEntranceProgress: this._getPhaseEntranceProgress(time),
         },
       });
     }
@@ -571,6 +659,9 @@
       this.pauseStartedAt = null;
       this.victoryShown = false;
       this.phaseCommitted = false;
+      this.phaseEntranceStartedAt = null;
+      this.phaseEntranceEndsAt = null;
+      this.phaseEntrancePending = showTutorial;
       this.ui.hideVictory();
       this.ui.setPaused(false);
       this.ui.setPhase(phase);
@@ -581,8 +672,7 @@
         this.ui.openTutorial(true);
       } else {
         this.modalOpen = false;
-        this.input.enabled = true;
-        this.canvas.focus();
+        this._beginPhaseEntrance();
         this.ui.showStatus(`Fase ${phase.number}: ${phase.title}. ${phase.description}`);
       }
     }

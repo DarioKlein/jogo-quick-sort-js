@@ -3,6 +3,20 @@
 
   const TIME_PENALTY_PER_SECOND = 3;
 
+  function calculatePlayableTime({
+    start,
+    end,
+    pausedMs = 0,
+    activePauseMs = 0,
+    phaseDowntimeMs = 0,
+  }) {
+    if (start === null || start === undefined) return 0;
+    return Math.max(
+      0,
+      end - start - pausedMs - activePauseMs - phaseDowntimeMs,
+    );
+  }
+
   function calculateRunStats({
     phaseCount,
     initialPhaseScore,
@@ -26,5 +40,9 @@
     };
   }
 
-  namespace.RunScoring = Object.freeze({ TIME_PENALTY_PER_SECOND, calculateRunStats });
+  namespace.RunScoring = Object.freeze({
+    TIME_PENALTY_PER_SECOND,
+    calculatePlayableTime,
+    calculateRunStats,
+  });
 })(window.SortFactory || (window.SortFactory = {}));
