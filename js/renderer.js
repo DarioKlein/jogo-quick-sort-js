@@ -39,6 +39,7 @@
       this.pipeSmoke = [];
       this.nextPipeSmokeAt = performance.now() + 1200 + Math.random() * 1800;
       this.lastRobotPosition = null;
+      this.robotDirection = null;
       this.lastSpeedTrailAt = Number.NEGATIVE_INFINITY;
       this.lastSelectedIndex = null;
       this.pickupStartedAt = 0;
@@ -98,32 +99,47 @@
           const carriedX = lerp(this.boxX(carryingIndex), frame.robot.x, liftProgress);
           const carriedY = lerp(BOX_Y, frame.robot.y - 124, liftProgress)
             - Math.sin(liftProgress * Math.PI) * 18;
+          const idleWhileCarrying = pickupProgress >= 1 && !frame.robot.moving;
+          const carryIdleShift = this._getRobotIdleMotion(
+            now,
+            idleWhileCarrying,
+            true,
+          ).torsoShift;
           const gripPose = {
             x: carriedX,
             y: carriedY,
             reach: reachProgress,
             grip: gripProgress,
           };
-          this._drawRobot(
-            frame.robot,
-            now,
-            this._isNearbyActionable(frame),
-            gripProgress > 0.25,
-            false,
+          const robotPose = this._drawRobot(frame.robot, now, {
+            canInteract: this._isNearbyActionable(frame),
+            carrying: gripProgress > 0.25,
             gripPose,
-          );
+            animation: RobotAnimation.CARRY,
+            idleWhileCarrying,
+          });
           this._drawLooseBox({
             x: carriedX,
-            y: carriedY,
+            y: carriedY + carryIdleShift,
             value: frame.snapshot.values[carryingIndex],
             index: carryingIndex,
             snapshot: frame.snapshot,
             now,
           });
-          if (gripProgress > 0.04) this._drawGripHands(carriedX, carriedY, gripProgress);
+          if (gripProgress > 0.04) {
+            this._drawGripHands(
+              carriedX,
+              carriedY + carryIdleShift,
+              gripProgress,
+              robotPose.side,
+            );
+          }
         } else {
           this.lastSelectedIndex = null;
-          this._drawRobot(frame.robot, now, this._isNearbyActionable(frame), false);
+          this._drawRobot(frame.robot, now, {
+            canInteract: this._isNearbyActionable(frame),
+            animation: frame.robot.moving ? RobotAnimation.WALK : RobotAnimation.IDLE,
+          });
         }
       }
 
@@ -156,6 +172,7 @@
       this.pipeSmoke = [];
       this.nextPipeSmokeAt = performance.now() + 1200 + Math.random() * 1800;
       this.lastRobotPosition = null;
+      this.robotDirection = null;
       this.lastSpeedTrailAt = Number.NEGATIVE_INFINITY;
       this.lastSelectedIndex = null;
       this.robotPose = { side: 0, back: 0, lastTime: null };
@@ -903,19 +920,34 @@
         }
       }
 
-      this._drawRobot(
-        robot,
-        now,
-        this._isNearbyActionable(frame),
+      const animation = phase === "placing"
+        ? RobotAnimation.PLACE
+        : phase === "handoff"
+          ? RobotAnimation.INTERACT
+          : RobotAnimation.CARRY;
+      const idleWhileCarrying = phase === "carry-back" && carrying && !robot.moving;
+      if (idleWhileCarrying) {
+        const carryIdleShift = this._getRobotIdleMotion(now, true, true).torsoShift;
+        boxes.forEach((box) => {
+          const isHeld = Math.abs(box.y - heldY) < 70 && Math.abs(box.x - robot.x) < 70;
+          if (isHeld) box.y += carryIdleShift;
+        });
+      }
+      const robotPose = this._drawRobot(robot, now, {
+        canInteract: this._isNearbyActionable(frame),
         carrying,
-        phase === "handoff" || phase === "placing",
+        suppressWalking: phase === "handoff" || phase === "placing",
         gripPose,
-      );
+        animation,
+        idleWhileCarrying,
+      });
       boxes.forEach((box) => this._drawLooseBox({ ...box, snapshot, now }));
       if (gripPose?.grip > 0.04) {
         const heldBox = boxes.find((box) => Math.abs(box.y - heldY) < 70 && Math.abs(box.x - robot.x) < 70);
         const grippedBox = heldBox ?? boxes.find((box) => box.x === gripPose.x && box.y === gripPose.y);
-        if (grippedBox) this._drawGripHands(grippedBox.x, grippedBox.y, gripPose.grip);
+        if (grippedBox) {
+          this._drawGripHands(grippedBox.x, grippedBox.y, gripPose.grip, robotPose.side);
+        }
       }
     }
 
@@ -1133,14 +1165,47 @@
         step: walking ? Math.sin(now / gaitDuration) * (robot.sprinting ? 11 : 8) : 0,
         bob: walking
           ? Math.abs(Math.sin(now / gaitDuration)) * (robot.sprinting ? -6 : -4)
-          : Math.sin(now / 500) * 2,
+          : 0,
       };
     }
 
-    _drawRobot(robot, now, canInteract, carrying = false, suppressWalking = false, gripPose = null) {
+    _getRobotIdleMotion(now, active = false, carrying = false) {
+      if (!active) {
+        return { eyeOpen: 1, armShift: 0, antennaGlow: 0, torsoShift: 0 };
+      }
+      const blinkDistance = Math.abs((now % 4200) - 3900);
+      return {
+        eyeOpen: clamp(blinkDistance / 90, 0.12, 1),
+        armShift: carrying ? 0 : Math.sin(now / 850) * 1.8,
+        antennaGlow: (Math.sin(now / 720) + 1) / 2,
+        torsoShift: Math.sin(now / (carrying ? 980 : 920)) * (carrying ? 0.55 : 0.85),
+      };
+    }
+
+    _drawRobot(robot, now, {
+      canInteract = false,
+      carrying = false,
+      suppressWalking = false,
+      gripPose = null,
+      animation = RobotAnimation.IDLE,
+      direction = null,
+      idleWhileCarrying = false,
+    } = {}) {
       const context = this.context;
       const { walking, step, bob } = this._getRobotMotion(robot, now, suppressWalking);
-      const pose = this._getRobotPose(robot, now, Boolean(gripPose || carrying));
+      const adaptedCarryIdle = idleWhileCarrying && !walking && carrying && Boolean(gripPose);
+      const idleMotion = this._getRobotIdleMotion(
+        now,
+        (animation === RobotAnimation.IDLE && !walking && !carrying && !gripPose)
+          || adaptedCarryIdle,
+        adaptedCarryIdle,
+      );
+      const pose = this._getRobotPose(
+        robot,
+        now,
+        animation,
+        direction ?? this.robotDirection,
+      );
       const sprinting = walking && robot.sprinting;
       const bodyColor = sprinting ? "#71366f" : "#294b54";
       const headColor = sprinting ? "#422443" : "#17333b";
@@ -1169,6 +1234,9 @@
       context.lineTo(legSpread + 4 - step, 58);
       context.stroke();
 
+      context.save();
+      context.translate(0, idleMotion.torsoShift);
+
       context.fillStyle = bodyColor;
       context.strokeStyle = accentColor;
       context.lineWidth = 3;
@@ -1187,8 +1255,8 @@
         context.globalAlpha = faceAlpha;
         context.fillStyle = accentColor;
         context.beginPath();
-        context.arc(-15, -33, 6, 0, Math.PI * 2);
-        context.arc(15, -33, 6, 0, Math.PI * 2);
+        context.ellipse(-15, -33, 6, 6 * idleMotion.eyeOpen, 0, 0, Math.PI * 2);
+        context.ellipse(15, -33, 6, 6 * idleMotion.eyeOpen, 0, 0, Math.PI * 2);
         context.fill();
         context.strokeStyle = profileEyeColor;
         context.lineWidth = 2;
@@ -1247,22 +1315,33 @@
       context.moveTo(antennaX, -58);
       context.lineTo(antennaX, -73);
       context.stroke();
+      context.save();
       context.fillStyle = COLORS.gold;
+      context.shadowColor = COLORS.gold;
+      context.shadowBlur = idleMotion.antennaGlow * 10;
       context.beginPath();
-      context.arc(antennaX, -79, 6, 0, Math.PI * 2);
+      context.arc(antennaX, -79, 6 + idleMotion.antennaGlow * 0.45, 0, Math.PI * 2);
       context.fill();
+      context.restore();
 
       context.strokeStyle = "#7799a1";
       context.lineWidth = 8;
       context.beginPath();
       if (gripPose) {
-        this._drawReachingArms(robot, y, step, gripPose);
+        this._drawReachingArms(robot, y, step, gripPose, pose);
       } else if (carrying) {
-        context.moveTo(-29, 0);
-        context.lineTo(-42, -67);
-        context.moveTo(29, 0);
-        context.lineTo(42, -67);
-        context.stroke();
+        [
+          { shoulderX: -29, handX: -42, far: true },
+          { shoulderX: 29, handX: 42, far: false },
+        ].forEach(({ shoulderX, handX, far }) => {
+          context.save();
+          context.globalAlpha = far ? this._getFarArmAlpha(pose.side) : 1;
+          context.beginPath();
+          context.moveTo(shoulderX, 0);
+          context.lineTo(handX, -67);
+          context.stroke();
+          context.restore();
+        });
       } else {
         const frontArmAlpha = 1 - pose.side;
         if (frontArmAlpha > 0.01) {
@@ -1270,9 +1349,9 @@
           context.globalAlpha = frontArmAlpha;
           context.beginPath();
           context.moveTo(-32, 2);
-          context.lineTo(-54, 18 - step / 2);
+          context.lineTo(-54, 18 - step / 2 + idleMotion.armShift);
           context.moveTo(32, 2);
-          context.lineTo(54, 18 + step / 2);
+          context.lineTo(54, 18 + step / 2 - idleMotion.armShift);
           context.stroke();
           context.restore();
         }
@@ -1281,24 +1360,49 @@
           context.save();
           context.globalAlpha = pose.side;
           context.beginPath();
-          context.moveTo(-4, 1);
-          context.lineTo(-backwardLean, 22 + step * 0.12);
-          context.moveTo(4, 1);
-          context.lineTo(-backwardLean - 4, 25 - step * 0.12);
+          context.moveTo(0, 1);
+          context.lineTo(-backwardLean - 2, 24 + step * 0.12);
           context.stroke();
           context.restore();
         }
       }
       context.restore();
+      context.restore();
 
       if (canInteract) {
         this._drawTag(x, y - 105, "E  INTERAGIR", COLORS.ink);
       }
+      return pose;
     }
 
-    _getRobotPose(robot, now, interacting = false) {
-      const targetSide = interacting ? 0 : robot.moving ? 1 : 0;
-      const targetBack = interacting ? 1 : 0;
+    _getFarArmAlpha(sidePose = 0) {
+      return lerp(1, PROFILE_FAR_ARM_ALPHA, clamp(sidePose, 0, 1));
+    }
+
+    _getRobotViewTarget(animation, robot, direction) {
+      if (animation === RobotAnimation.PLACE || animation === RobotAnimation.INTERACT) {
+        return { side: 0, back: 1 };
+      }
+      if (animation !== RobotAnimation.CARRY) {
+        return { side: robot.moving ? 1 : 0, back: 0 };
+      }
+      if (!robot.moving) return { side: 0, back: 0 };
+      if (!direction) return { side: 1, back: 0 };
+      if (Math.abs(direction.x) >= Math.abs(direction.y)) {
+        return { side: 1, back: 0 };
+      }
+      return { side: 0, back: direction.y < 0 ? 1 : 0 };
+    }
+
+    _getRobotPose(
+      robot,
+      now,
+      animation = RobotAnimation.IDLE,
+      direction = this.robotDirection,
+    ) {
+      const target = this._getRobotViewTarget(animation, robot, direction);
+      const targetSide = target.side;
+      const targetBack = target.back;
       if (this.robotPose.lastTime === null) {
         this.robotPose.side = targetSide;
         this.robotPose.back = targetBack;
@@ -1316,16 +1420,23 @@
       return { side: this.robotPose.side, back: this.robotPose.back };
     }
 
-    _drawReachingArms(robot, robotY, step, gripPose) {
+    _drawReachingArms(robot, robotY, step, gripPose, pose = { side: 0 }) {
       const context = this.context;
       const reach = clamp(gripPose.reach, 0, 1);
-      const targetXs = [
+      const frontTargetXs = [
         (gripPose.x - BOX_SIZE / 2 + 7 - robot.x) * robot.facing,
         (gripPose.x + BOX_SIZE / 2 - 7 - robot.x) * robot.facing,
       ].sort((left, right) => left - right);
+      const boxCenterX = (gripPose.x - robot.x) * robot.facing;
+      const profileTargetXs = [boxCenterX - 24, boxCenterX + 24];
+      const targetXs = frontTargetXs.map((targetX, index) => (
+        lerp(targetX, profileTargetXs[index], pose.side)
+      ));
       const targetY = clamp(gripPose.y + BOX_SIZE / 2 - robotY - 2, -102, 24);
-      const shoulders = [-29, 29];
-      const idleHands = [-50, 50];
+      const shoulderSpread = lerp(29, 18, pose.side);
+      const idleHandSpread = lerp(50, 28, pose.side);
+      const shoulders = [-shoulderSpread, shoulderSpread];
+      const idleHands = [-idleHandSpread, idleHandSpread];
 
       shoulders.forEach((shoulderX, index) => {
         const side = index === 0 ? -1 : 1;
@@ -1333,22 +1444,34 @@
         const handY = lerp(18 + side * step * 0.2, targetY, reach);
         const elbowX = lerp(shoulderX, handX, 0.52) + side * (9 - reach * 4);
         const elbowY = lerp(1, handY, 0.48) + 10;
+        context.save();
+        context.globalAlpha = index === 0 ? this._getFarArmAlpha(pose.side) : 1;
+        context.beginPath();
         context.moveTo(shoulderX, 0);
         context.lineTo(elbowX, elbowY);
         context.lineTo(handX, handY);
+        context.stroke();
+        context.restore();
       });
-      context.stroke();
     }
 
     _updateSpeedTrails(robot, now, suppressed = false) {
       const previous = this.lastRobotPosition;
       this.lastRobotPosition = { x: robot.x, y: robot.y };
-      if (!previous || suppressed || !robot.moving || !robot.sprinting) return;
-
-      const dx = robot.x - previous.x;
-      const dy = robot.y - previous.y;
+      const dx = previous ? robot.x - previous.x : 0;
+      const dy = previous ? robot.y - previous.y : 0;
       const distance = Math.hypot(dx, dy);
-      if (distance < 0.5 || distance > 100 || now - this.lastSpeedTrailAt < 45) return;
+      const hasDirection = Boolean(previous)
+        && !suppressed
+        && robot.moving
+        && distance >= 0.5
+        && distance <= 100;
+      this.robotDirection = hasDirection
+        ? { x: dx / distance, y: dy / distance }
+        : null;
+
+      if (!hasDirection || !robot.sprinting) return;
+      if (now - this.lastSpeedTrailAt < 45) return;
 
       this.lastSpeedTrailAt = now;
       const directionX = dx / distance;
@@ -1398,20 +1521,27 @@
       });
     }
 
-    _drawGripHands(x, boxY, grip = 1) {
+    _drawGripHands(x, boxY, grip = 1, sidePose = 0) {
       const context = this.context;
       const half = BOX_SIZE / 2;
-      const inset = lerp(-4, 5, clamp(grip, 0, 1));
+      const inset = lerp(-4, 5, clamp(grip, 0, 1)) + sidePose * 18;
       const radius = lerp(5, 8, clamp(grip, 0, 1));
       context.save();
       context.fillStyle = "#9ec3ca";
       context.strokeStyle = "#17333b";
       context.lineWidth = 3;
-      context.beginPath();
-      context.arc(x - half + inset, boxY + half - 2, radius, 0, Math.PI * 2);
-      context.arc(x + half - inset, boxY + half - 2, radius, 0, Math.PI * 2);
-      context.fill();
-      context.stroke();
+      [
+        { handX: x - half + inset, far: true },
+        { handX: x + half - inset, far: false },
+      ].forEach(({ handX, far }) => {
+        context.save();
+        context.globalAlpha = far ? this._getFarArmAlpha(sidePose) : 1;
+        context.beginPath();
+        context.arc(handX, boxY + half - 2, radius, 0, Math.PI * 2);
+        context.fill();
+        context.stroke();
+        context.restore();
+      });
       context.restore();
     }
 
