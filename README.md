@@ -26,6 +26,11 @@ O arquivo de ranking é recriado vazio sempre que `npm start` inicia uma nova ex
 os nomes e melhores resultados continuam no ranking mesmo se um aluno fechar o navegador. Nomes são
 únicos, ignorando maiúsculas, espaços e acentos; o mesmo navegador consegue recuperar sua identidade.
 
+Ao atualizar ou fechar a página, a sessão permanece disponível por até dois minutos. Se a página for
+aberta novamente nesse intervalo, o jogador pode recuperar o mesmo card exibido no painel e iniciar
+uma nova run. Recusar a recuperação remove imediatamente a sessão anterior; após o prazo, o servidor
+a descarta automaticamente.
+
 A transmissão prioriza o desempenho de quem está jogando: o cliente envia no máximo 20 estados por
 segundo quando é assistido. O painel reproduz esses estados em 60 FPS com um buffer adaptativo de
 aproximadamente 320 a 700 ms, aceitando atraso adicional para absorver oscilações da rede sem aumentar
@@ -36,10 +41,20 @@ Chrome/Chromium, Edge e Firefox recentes são suportados.
 ## Controles
 
 - `W`, `A`, `S`, `D` ou setas: movimentar o robô;
+- `Shift`: correr enquanto se movimenta;
 - `E` ou `Espaço`: inspecionar ou selecionar a caixa próxima;
 - `Esc`: fechar o tutorial;
 - **Como jogar**: reabrir o tutorial;
 - **Reiniciar run**: zerar a tentativa atual e voltar ao caso médio.
+
+## Painel do apresentador
+
+No painel `/dev`, os cards de sessões ativas permitem assistir às partidas:
+
+- use o seletor **Partida** na transmissão ou os botões dos cards para alternar entre jogadores;
+- a troca encerra a conexão anterior e mostra o estado de conexão ou reconexão da nova partida;
+- atualizar o painel e remover um registro exibem feedback de carregamento, bloqueiam cliques duplicados e permitem tentar novamente em caso de erro;
+- no ranking, jogadores que não estão mais online exibem um botão `-` para remover o nome e todo o histórico. O nome fica livre para uma nova entrada.
 
 ## Regra ensinada
 
@@ -63,9 +78,9 @@ Em cada subarray:
 6. o processo continua primeiro no lado esquerdo e depois no direito.
 
 Ao terminar uma fase, o jogo avança automaticamente. Depois do pior caso, registra a pontuação e o
-tempo total da run. A pontuação reúne as três fases e perde 3 pontos por segundo; em caso de empate no
-ranking, vence o menor tempo e depois o menor número de erros. Uma nova tentativa preserva o melhor
-resultado anterior do jogador.
+tempo total da run. A pontuação reúne as três fases e perde 3 pontos por segundo e 5 pontos por erro;
+em caso de empate no ranking, vence o menor tempo e depois o menor número de erros. Uma nova tentativa
+preserva o melhor resultado anterior do jogador.
 
 Durante uma troca, a primeira caixa selecionada fica nas mãos do robô. Ao chegar à segunda posição e interagir, essa caixa ocupa o encaixe e a caixa deslocada passa para as mãos do robô. O jogador precisa caminhar de volta ao primeiro encaixe vazio e interagir novamente para concluir a troca. O robô nunca percorre esse caminho automaticamente.
 

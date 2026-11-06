@@ -6,6 +6,7 @@
     PivotStrategy,
     INITIAL_ARRAY,
     INITIAL_SCORE,
+    ERROR_PENALTY,
   } = namespace.Constants;
   const { isSorted } = namespace.Utils;
 
@@ -119,7 +120,7 @@
 
     selectForSwap(index) {
       if (this.state !== GameState.SWAP_I_J && this.state !== GameState.PLACE_PIVOT) {
-        return this._reject("Esta caixa não pode ser selecionada neste momento.", 40);
+        return this._reject("Esta caixa não pode ser selecionada neste momento.");
       }
 
       const pair = this.state === GameState.SWAP_I_J
@@ -128,7 +129,7 @@
       const allowed = new Set(pair);
 
       if (!allowed.has(index)) {
-        return this._reject("Troca inválida. Selecione somente as duas caixas destacadas.", 60);
+        return this._reject("Troca inválida. Selecione somente as duas caixas destacadas.");
       }
 
       if (pair[0] === pair[1]) {
@@ -163,8 +164,8 @@
       };
     }
 
-    rejectInteraction(message, penalty = 40) {
-      return this._reject(message, penalty);
+    rejectInteraction(message) {
+      return this._reject(message);
     }
 
     completeSwap(a, b) {
@@ -320,8 +321,8 @@
       return pivotStrategy;
     }
 
-    _reject(message, penalty = 40) {
-      this.score = Math.max(0, this.score - penalty);
+    _reject(message) {
+      this.score = Math.max(0, this.score - ERROR_PENALTY);
       this.errors += 1;
       this.message = message;
       this.comparison = {

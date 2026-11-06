@@ -101,6 +101,37 @@ async function run() {
     assert.notEqual(reconnect.body.id, join.body.id);
     const playerId = reconnect.body.id;
 
+    const suspend = await requestJson(`${baseUrl}/api/players/${playerId}/suspend`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(suspend.response.status, 200);
+    assert.equal((await requestJson(`${baseUrl}/api/players`)).body[0].status, "reconectando");
+
+    const missingResume = await requestJson(`${baseUrl}/api/players/resume/check`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: "token-inexistente-123" }),
+    });
+    assert.equal(missingResume.body.available, false);
+
+    const resumeCheck = await requestJson(`${baseUrl}/api/players/resume/check`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: join.body.token }),
+    });
+    assert.deepEqual(resumeCheck.body, { available: true, name: "Maria" });
+
+    const resumed = await requestJson(`${baseUrl}/api/players/resume`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: join.body.token }),
+    });
+    assert.equal(resumed.response.status, 200);
+    assert.equal(resumed.body.id, playerId, "recuperação deve preservar o mesmo card da sessão");
+    assert.equal((await requestJson(`${baseUrl}/api/players`)).body[0].status, "menu");
+
     rosterStream = await openEventStream(`${baseUrl}/api/events`);
     const initialRoster = await rosterStream.nextEvent("roster");
     assert.equal(initialRoster[0].name, "Maria");
@@ -145,14 +176,58 @@ async function run() {
     assert.equal(ranking.body[0].attempts, 1);
     assert.equal(ranking.body[0].bestTimeMs, 123_456);
 
+    const onlineRemoval = await fetch(`${baseUrl}/api/ranking/${ranking.body[0].id}`, {
+      method: "DELETE",
+    });
+    assert.equal(onlineRemoval.status, 409, "jogador online não deve ser removido do ranking");
+    assert.equal((await requestJson(`${baseUrl}/api/ranking`)).body.length, 1);
+
     await requestJson(`${baseUrl}/api/players/${playerId}/leave`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "{}",
     });
     assert.deepEqual((await requestJson(`${baseUrl}/api/players`)).body, []);
-    assert.equal((await requestJson(`${baseUrl}/api/ranking`)).body[0].online, false);
-    assert.equal(JSON.parse(fs.readFileSync(rankingFile, "utf8")).players.length, 1);
+    const offlineRanking = await requestJson(`${baseUrl}/api/ranking`);
+    assert.equal(offlineRanking.body[0].online, false);
+
+    const rankingRemoval = await fetch(`${baseUrl}/api/ranking/${offlineRanking.body[0].id}`, {
+      method: "DELETE",
+    });
+    assert.equal(rankingRemoval.status, 200);
+    assert.deepEqual((await requestJson(`${baseUrl}/api/ranking`)).body, []);
+    assert.equal(JSON.parse(fs.readFileSync(rankingFile, "utf8")).players.length, 0);
+
+    const missingRemoval = await fetch(
+      `${baseUrl}/api/ranking/00000000-0000-4000-8000-000000000000`,
+      { method: "DELETE" },
+    );
+    assert.equal(missingRemoval.status, 404);
+
+    const freedJoin = await requestJson(`${baseUrl}/api/players/join`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Maria" }),
+    });
+    assert.equal(freedJoin.response.status, 201, "o nome deve ficar livre após a remoção");
+    assert.notEqual(freedJoin.body.token, join.body.token, "a nova entrada deve criar outro token");
+    await requestJson(`${baseUrl}/api/players/${freedJoin.body.id}/suspend`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const discardResume = await requestJson(`${baseUrl}/api/players/resume/discard`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: freedJoin.body.token }),
+    });
+    assert.equal(discardResume.response.status, 200);
+    assert.deepEqual((await requestJson(`${baseUrl}/api/players`)).body, []);
+    const freedRanking = await requestJson(`${baseUrl}/api/ranking`);
+    assert.equal(freedRanking.body[0].attempts, 0);
+    await fetch(`${baseUrl}/api/ranking/${freedRanking.body[0].id}`, { method: "DELETE" });
+    assert.deepEqual((await requestJson(`${baseUrl}/api/ranking`)).body, []);
+    assert.equal(JSON.parse(fs.readFileSync(rankingFile, "utf8")).players.length, 0);
   } finally {
     rosterStream?.close();
     watchStream?.close();
@@ -169,7 +244,7 @@ async function run() {
     fs.rmSync(tempDirectory, { recursive: true, force: true });
   }
 
-  console.log("✓ Servidor local: nomes únicos, ranking temporário, conclusão e reinício limpo");
+  console.log("✓ Servidor local: ranking, recuperação da mesma sessão, descarte e reinício limpo");
 }
 
 run().catch((error) => {

@@ -11,6 +11,8 @@
     HANDOFF_DURATION,
     PLACE_DURATION,
     INITIAL_SCORE,
+    WALK_SPEED,
+    SPRINT_MULTIPLIER,
     GameState,
     PivotStrategy,
     PHASES,
@@ -50,6 +52,7 @@
 
       this._bindEvents();
       this.liveSession.onConnectionChange = (state) => this.ui.setConnectionState(state);
+      this.liveSession.onSessionEnded = () => this._handleSessionEnded();
       this.engine.subscribe((snapshot) => this._handleStateChange(snapshot));
       this.ui.setPhase(this.currentPhase);
       this.ui.update(this.engine.getSnapshot(), this._getRunStats(this.engine.getSnapshot()));
@@ -58,6 +61,7 @@
 
       this._frame = this._frame.bind(this);
       requestAnimationFrame(this._frame);
+      this._checkForResumableSession();
     }
 
     restart() {
@@ -78,6 +82,8 @@
       };
       this.ui.onRestart = () => this.restart();
       this.ui.onStart = (playerName) => this._joinAndStart(playerName);
+      this.ui.onResume = () => this._resumeSavedSession();
+      this.ui.onResumeDecline = () => this._declineSavedSession();
       this.ui.onPlayAgain = () => this._beginRun(false);
 
       window.addEventListener("blur", () => {
@@ -172,6 +178,7 @@
 
     _update(delta, time) {
       if (this.manualSwap && this.manualSwap.phase !== "carry-back") {
+        this._stopRobotMotion();
         const duration = this._getManualPhaseDuration(this.manualSwap.phase);
         const progress = (time - this.manualSwap.startedAt) / duration;
         if (progress >= 1) this._advanceManualSwap(time);
@@ -188,12 +195,19 @@
     }
 
     _updateRobot(delta) {
-      const movement = this.input.getMovementVector();
-      const speed = 260;
+      const movement = this._updateRobotMotion();
+      const speed = WALK_SPEED * (this.robot.sprinting ? SPRINT_MULTIPLIER : 1);
       this.robot.x = clamp(this.robot.x + movement.x * speed * delta, 90, WIDTH - 90);
       this.robot.y = clamp(this.robot.y + movement.y * speed * delta, 500, HEIGHT - 77);
+    }
+
+    _updateRobotMotion() {
+      const movement = this.input.getMovementVector();
+      const sprinting = this.input.isSprinting();
       this.robot.moving = movement.x !== 0 || movement.y !== 0;
+      this.robot.sprinting = sprinting && this.robot.moving;
       if (movement.x !== 0) this.robot.facing = movement.x > 0 ? 1 : -1;
+      return movement;
     }
 
     _findNearbyBox() {
@@ -274,7 +288,7 @@
       const destinationIndex = this.manualSwap.a;
       if (this.nearbyIndex !== destinationIndex) {
         const message = `A caixa deve ser levada até a posição ${destinationIndex + 1}, que ficou vazia.`;
-        this.engine.rejectInteraction(message, 40);
+        this.engine.rejectInteraction(message);
         this.ui.setObjective(message);
         this.ui.showStatus(message, true);
         return;
@@ -282,7 +296,13 @@
 
       this.manualSwap.phase = "placing";
       this.manualSwap.startedAt = performance.now();
+      this._stopRobotMotion();
       this.ui.setObjective(`Colocando a caixa na posição ${destinationIndex + 1}…`);
+    }
+
+    _stopRobotMotion() {
+      this.robot.moving = false;
+      this.robot.sprinting = false;
     }
 
     _getManualPhaseDuration(phase) {
@@ -291,7 +311,7 @@
     }
 
     _createRobot() {
-      return { x: BOX_START_X, y: 584, facing: 1, moving: false };
+      return { x: BOX_START_X, y: 584, facing: 1, moving: false, sprinting: false };
     }
 
     async _joinAndStart(playerName) {
@@ -307,6 +327,66 @@
       } finally {
         this.ui.setStartPending(false);
       }
+    }
+
+    async _checkForResumableSession() {
+      if (!this.liveSession.getSavedIdentity()) return;
+      this.ui.setStartPending(true, "Verificando sessão…");
+      try {
+        const resumable = await this.liveSession.checkResumableSession();
+        if (resumable) this.ui.showResumePrompt(resumable.name);
+      } catch {
+        // Sem servidor disponível, o fluxo normal de entrada permanece acessível.
+      } finally {
+        this.ui.setStartPending(false);
+      }
+    }
+
+    async _resumeSavedSession() {
+      this.ui.setResumePending(true);
+      this.ui.showResumeError("");
+      try {
+        const player = await this.liveSession.resume();
+        this.ui.setPlayerName(player.name);
+        this.ui.hideResumePrompt();
+        this.ui.hideStartMenu();
+        this._beginRun(true);
+        this.ui.showStatus("Sessão recuperada. Uma nova run foi preparada.");
+      } catch (error) {
+        this.ui.showResumeError(error.message || "Não foi possível recuperar a sessão.");
+      } finally {
+        this.ui.setResumePending(false);
+      }
+    }
+
+    async _declineSavedSession() {
+      this.ui.setResumePending(true);
+      await this.liveSession.discardResumableSession();
+      this.ui.setResumePending(false);
+      this.ui.hideResumePrompt({ showStart: true });
+    }
+
+    _handleSessionEnded() {
+      window.clearTimeout(this.phaseTransitionTimer);
+      this.runSerial += 1;
+      this.runStartedAt = null;
+      this.runFinishedAt = null;
+      this.runCompleted = false;
+      this.phaseCommitted = false;
+      this.completedScoreDelta = 0;
+      this.completedErrors = 0;
+      this.manualSwap = null;
+      this.paused = true;
+      this.victoryShown = false;
+      this.input.enabled = false;
+      this.input.clear();
+      this.engine.reset();
+      this.renderer.resetEffects();
+      this.ui.showStartMenu({
+        resetPlayerName: true,
+        message: "Sua sessão foi encerrada. Entre novamente para iniciar uma nova run.",
+      });
+      this.ui.showStatus("Sessão encerrada pelo painel. Você voltou ao início.", true, 8000);
     }
 
     _beginRun(showTutorial) {

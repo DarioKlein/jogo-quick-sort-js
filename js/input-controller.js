@@ -35,6 +35,11 @@
       return { x, y };
     }
 
+    isSprinting() {
+      if (!this.enabled) return false;
+      return this._hasAny("ShiftLeft", "ShiftRight");
+    }
+
     consumeInteraction() {
       if (!this.enabled || !this.interactionQueued) return false;
       this.interactionQueued = false;

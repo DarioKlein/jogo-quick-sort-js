@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#071a22" />
     <meta name="description" content="Painel local do apresentador do Sort Factory." />
     <title>Sort Factory — Painel da Sala</title>
-    <link rel="stylesheet" href="dev.css" />
+    <link rel="stylesheet" href="dev.css?v=20261105-8" />
   </head>
   <body>
     <header class="dev-header">
@@ -14,7 +14,7 @@
         <p class="eyebrow">PROTOCOLO PIVÔ · CONTROLE LOCAL</p>
         <h1>SALA <span>AO VIVO</span></h1>
       </div>
-      <div class="server-state" id="server-state" data-state="connecting">
+      <div role="status" class="server-state" id="server-state" data-state="connecting">
         <i aria-hidden="true"></i>
         <span>Conectando ao servidor…</span>
       </div>
@@ -61,6 +61,10 @@
           <h2 id="spectator-title">Assistindo <span id="spectator-name">—</span></h2>
         </div>
         <div class="spectator__meta">
+          <label class="spectator__switch">
+            <span>Partida</span>
+            <select id="spectator-player-select" aria-label="Alternar partida assistida"></select>
+          </label>
           <span>Fase <strong id="spectator-phase">—</strong></span>
           <span>Pontos <strong id="spectator-score">—</strong></span>
           <span>Tempo <strong id="spectator-time">—</strong></span>
@@ -68,11 +72,12 @@
           <button id="close-spectator" class="secondary-button" type="button">Fechar transmissão</button>
         </div>
       </header>
+      <p id="spectator-status" class="spectator__status" role="status"></p>
       <div class="spectator__stage">
         <canvas id="spectator-canvas" width="1280" height="720">
           Seu navegador precisa oferecer suporte ao Canvas 2D.
         </canvas>
-        <div id="spectator-waiting" class="spectator__waiting">
+        <div id="spectator-waiting" role="status" class="spectator__waiting">
           Aguardando o jogador iniciar a missão…
         </div>
       </div>
@@ -81,10 +86,21 @@
     <template id="ranking-item-template">
       <li class="ranking-item">
         <span class="ranking-item__position"></span>
-        <span class="ranking-item__name"></span>
-        <span class="ranking-item__time"></span>
-        <span class="ranking-item__attempts"></span>
-        <strong class="ranking-item__score"></strong>
+        <div class="ranking-item__identity">
+          <span class="ranking-item__player">
+            <span class="ranking-item__name"></span>
+            <i class="ranking-item__status" aria-hidden="true"></i>
+          </span>
+          <span class="ranking-item__meta">
+            <span class="ranking-item__time"></span>
+            <span class="ranking-item__attempts"></span>
+          </span>
+        </div>
+        <div class="ranking-item__score-box">
+          <span>Pontos</span>
+          <strong class="ranking-item__score"></strong>
+        </div>
+        <button class="ranking-item__remove" type="button" aria-label="Remover do ranking">×</button>
       </li>
     </template>
 
@@ -105,10 +121,10 @@
       </article>
     </template>
 
-    <script src="js/constants.js" defer></script>
-    <script src="js/utils.js" defer></script>
-    <script src="js/renderer.js" defer></script>
-    <script src="js/spectator-buffer.js" defer></script>
-    <script src="js/dev-dashboard.js" defer></script>
+    <script src="js/constants.js?v=20261105-8" defer></script>
+    <script src="js/utils.js?v=20261105-8" defer></script>
+    <script src="js/renderer.js?v=20261105-8" defer></script>
+    <script src="js/spectator-buffer.js?v=20261105-8" defer></script>
+    <script src="js/dev-dashboard.js?v=20261105-8" defer></script>
   </body>
 </html>

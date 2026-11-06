@@ -9,7 +9,7 @@
       content="Sort Factory: aprenda Quick Sort organizando uma linha de produção."
     />
     <title>Sort Factory — Protocolo Pivô</title>
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style.css?v=20261105-8" />
   </head>
   <body>
     <section class="mobile-blocker" role="alert" aria-labelledby="mobile-blocker-title">
@@ -83,6 +83,7 @@
 
         <div class="controls-hint" aria-hidden="true">
           <span><kbd>WASD</kbd> / <kbd>↑↓←→</kbd> mover</span>
+          <span><kbd>Shift</kbd> correr</span>
           <span><kbd>E</kbd> / <kbd>Espaço</kbd> interagir</span>
         </div>
       </section>
@@ -133,12 +134,30 @@
         </ol>
 
         <p class="challenge-rule">
-          O pivô será sempre a primeira caixa de cada trecho. Pontuação, erros e tempo continuam entre as três fases.
+          O pivô será sempre a primeira caixa de cada trecho. Pontuação, erros e tempo continuam entre as três fases. Cada erro desconta 5 pontos.
         </p>
 
         <button id="start-mission-button" class="primary-button primary-button--wide" type="button">
           Iniciar desafio
         </button>
+      </section>
+    </div>
+
+    <div id="resume-modal" class="modal modal--hidden" role="dialog" aria-modal="true" aria-labelledby="resume-title">
+      <div class="modal__backdrop"></div>
+      <section class="modal__card modal__card--resume">
+        <div class="modal__accent"></div>
+        <div class="resume-session__icon" aria-hidden="true">↻</div>
+        <p class="eyebrow">SESSÃO ENCONTRADA</p>
+        <h2 id="resume-title">Continuar como <span id="resume-player-name">—</span>?</h2>
+        <p class="modal__text">
+          Encontramos uma sessão recente neste navegador. Você pode recuperar o mesmo jogador no painel da sala e iniciar uma nova run.
+        </p>
+        <p id="resume-error" class="form-error" role="alert"></p>
+        <div class="modal__actions resume-session__actions">
+          <button id="resume-new-session" class="secondary-button" type="button">Usar outro jogador</button>
+          <button id="resume-session" class="primary-button" type="button">Continuar sessão</button>
+        </div>
       </section>
     </div>
 
@@ -184,14 +203,14 @@
       </section>
     </div>
 
-    <script src="js/constants.js" defer></script>
-    <script src="js/utils.js" defer></script>
-    <script src="js/quick-sort-engine.js" defer></script>
-    <script src="js/input-controller.js" defer></script>
-    <script src="js/ui-controller.js" defer></script>
-    <script src="js/renderer.js" defer></script>
-    <script src="js/live-session.js" defer></script>
-    <script src="js/run-scoring.js" defer></script>
-    <script src="js/game.js" defer></script>
+    <script src="js/constants.js?v=20261105-8" defer></script>
+    <script src="js/utils.js?v=20261105-8" defer></script>
+    <script src="js/quick-sort-engine.js?v=20261105-8" defer></script>
+    <script src="js/input-controller.js?v=20261105-8" defer></script>
+    <script src="js/ui-controller.js?v=20261105-8" defer></script>
+    <script src="js/renderer.js?v=20261105-8" defer></script>
+    <script src="js/live-session.js?v=20261105-8" defer></script>
+    <script src="js/run-scoring.js?v=20261105-8" defer></script>
+    <script src="js/game.js?v=20261105-8" defer></script>
   </body>
 </html>

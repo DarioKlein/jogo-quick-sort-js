@@ -95,6 +95,69 @@ assert.doesNotThrow(() => draw({
   selected: 0,
 }, { a: 0, b: 0, phase: "placing", phaseProgress: 0.5 }, 3000));
 
+assert.doesNotThrow(() => renderer.draw({
+  time: 3500,
+  snapshot: baseSnapshot,
+  robot: { ...robot, moving: true, sprinting: true },
+  nearbyIndex: null,
+  manualSwap: null,
+  paused: false,
+  modalOpen: false,
+  victory: false,
+}));
+
+const runningRobot = { ...robot, moving: true, sprinting: true };
+const runningMotion = renderer._getRobotMotion(runningRobot, 3500);
+const actionMotion = renderer._getRobotMotion(runningRobot, 3500, true);
+assert.equal(runningMotion.walking, true);
+assert.notEqual(runningMotion.step, 0);
+assert.equal(actionMotion.walking, false, "posicionar a caixa deve omitir a caminhada");
+assert.equal(actionMotion.step, 0);
+
+const suppressedPhases = [];
+const drawRobot = renderer._drawRobot.bind(renderer);
+renderer._drawRobot = (...args) => suppressedPhases.push(args[4]);
+draw({ ...baseSnapshot, state: GameState.SWAP_I_J }, {
+  a: 1,
+  b: 4,
+  phase: "handoff",
+  phaseProgress: 0.3,
+}, 3600);
+draw({ ...baseSnapshot, state: GameState.SWAP_I_J }, {
+  a: 1,
+  b: 4,
+  phase: "placing",
+  phaseProgress: 0.3,
+}, 3700);
+renderer._drawRobot = drawRobot;
+assert.deepEqual(
+  suppressedPhases,
+  [true, true],
+  "trocar e posicionar caixas devem congelar as pernas",
+);
+
+context.assignments.length = 0;
+renderer._drawRobot(runningRobot, 3500, false);
+assert.equal(
+  context.assignments.some(({ property, value }) => property === "fillStyle" && value === "#71366f"),
+  true,
+  "robô correndo deve usar uma cor corporal diferente",
+);
+
+renderer.speedTrails = [];
+renderer.lastRobotPosition = null;
+renderer._updateSpeedTrails({ ...runningRobot, x: 300, y: 580 }, 4000);
+renderer._updateSpeedTrails({ ...runningRobot, x: 314, y: 580 }, 4050);
+assert.equal(renderer.speedTrails.length, 2, "corrida deve criar rastros temporários");
+assert.ok(
+  renderer.speedTrails.every((trail) => trail.x < 314 && trail.endX < trail.x),
+  "rastros devem nascer atrás da direção do movimento e ficar no cenário",
+);
+renderer._updateSpeedTrails({ ...runningRobot, x: 328, y: 580 }, 4100, true);
+assert.equal(renderer.speedTrails.length, 2, "ações que bloqueiam a corrida não devem criar rastros");
+renderer._drawSpeedTrails(0.33);
+assert.equal(renderer.speedTrails.length, 0, "rastros devem desaparecer rapidamente");
+
 assert.equal(
   context.assignments.some(({ property }) => property === "filter"),
   false,

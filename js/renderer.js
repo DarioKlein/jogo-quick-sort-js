@@ -20,6 +20,9 @@
       this.context = canvas.getContext("2d", { alpha: false });
       this.pointerPositions = { i: BOX_START_X, j: BOX_START_X };
       this.particles = [];
+      this.speedTrails = [];
+      this.lastRobotPosition = null;
+      this.lastSpeedTrailAt = Number.NEGATIVE_INFINITY;
       this.lastSelectedIndex = null;
       this.pickupStartedAt = 0;
       this.lastTime = performance.now();
@@ -38,8 +41,13 @@
 
       context.clearRect(0, 0, WIDTH, HEIGHT);
       this._drawBackground(now);
+      const suppressSpeedTrail = frame.paused
+        || frame.modalOpen
+        || ["handoff", "placing"].includes(frame.manualSwap?.phase);
+      this._updateSpeedTrails(frame.robot, now, suppressSpeedTrail);
       this._drawSegmentZones(frame.snapshot);
       this._drawConveyor(now, frame.victory);
+      this._drawSpeedTrails(delta);
       this._drawBoxes(frame, now);
       this._drawPointers(frame.snapshot, delta, now);
 
@@ -57,7 +65,13 @@
           const carriedX = lerp(this.boxX(carryingIndex), frame.robot.x, pickupProgress);
           const carriedY = lerp(BOX_Y, frame.robot.y - 124, pickupProgress)
             - Math.sin(pickupProgress * Math.PI) * 24;
-          this._drawRobot(frame.robot, now, this._isNearbyActionable(frame), pickupProgress > 0.32);
+          this._drawRobot(
+            frame.robot,
+            now,
+            this._isNearbyActionable(frame),
+            pickupProgress > 0.32,
+            false,
+          );
           this._drawLooseBox({
             x: carriedX,
             y: carriedY,
@@ -98,6 +112,9 @@
 
     resetEffects() {
       this.particles = [];
+      this.speedTrails = [];
+      this.lastRobotPosition = null;
+      this.lastSpeedTrailAt = Number.NEGATIVE_INFINITY;
       this.lastSelectedIndex = null;
     }
 
@@ -429,7 +446,13 @@
         }
       }
 
-      this._drawRobot(robot, now, this._isNearbyActionable(frame), carrying);
+      this._drawRobot(
+        robot,
+        now,
+        this._isNearbyActionable(frame),
+        carrying,
+        phase === "handoff" || phase === "placing",
+      );
       boxes.forEach((box) => this._drawLooseBox({ ...box, snapshot, now }));
       if (carrying) {
         const heldBox = boxes.find((box) => Math.abs(box.y - heldY) < 70 && Math.abs(box.x - robot.x) < 70);
@@ -630,19 +653,33 @@
       context.restore();
     }
 
-    _drawRobot(robot, now, canInteract, carrying = false) {
+    _getRobotMotion(robot, now, suppressWalking = false) {
+      const walking = robot.moving && !suppressWalking;
+      const gaitDuration = robot.sprinting ? 55 : 90;
+      return {
+        walking,
+        step: walking ? Math.sin(now / gaitDuration) * (robot.sprinting ? 11 : 8) : 0,
+        bob: walking
+          ? Math.abs(Math.sin(now / gaitDuration)) * (robot.sprinting ? -6 : -4)
+          : Math.sin(now / 500) * 2,
+      };
+    }
+
+    _drawRobot(robot, now, canInteract, carrying = false, suppressWalking = false) {
       const context = this.context;
-      const walking = robot.moving;
-      const step = walking ? Math.sin(now / 90) * 8 : 0;
-      const bob = walking ? Math.abs(Math.sin(now / 90)) * -4 : Math.sin(now / 500) * 2;
+      const { walking, step, bob } = this._getRobotMotion(robot, now, suppressWalking);
+      const sprinting = walking && robot.sprinting;
+      const bodyColor = sprinting ? "#71366f" : "#294b54";
+      const headColor = sprinting ? "#422443" : "#17333b";
+      const accentColor = canInteract ? "#ffffff" : sprinting ? COLORS.magenta : COLORS.cyan;
       const x = robot.x;
       const y = robot.y + bob;
 
       context.save();
       context.translate(x, y);
       context.scale(robot.facing, 1);
-      context.shadowColor = canInteract ? COLORS.ink : COLORS.cyan;
-      context.shadowBlur = canInteract ? 20 : 9;
+      context.shadowColor = canInteract ? COLORS.ink : sprinting ? COLORS.magenta : COLORS.cyan;
+      context.shadowBlur = canInteract ? 20 : sprinting ? 18 : 9;
 
       context.strokeStyle = "#7296a0";
       context.lineWidth = 9;
@@ -654,18 +691,18 @@
       context.lineTo(21 - step, 58);
       context.stroke();
 
-      context.fillStyle = "#294b54";
-      context.strokeStyle = canInteract ? "#ffffff" : "#69dce5";
+      context.fillStyle = bodyColor;
+      context.strokeStyle = accentColor;
       context.lineWidth = 3;
       roundedRect(context, -34, -15, 68, 59, 16);
       context.fill();
       context.stroke();
 
-      context.fillStyle = "#17333b";
+      context.fillStyle = headColor;
       roundedRect(context, -39, -57, 78, 49, 14);
       context.fill();
       context.stroke();
-      context.fillStyle = canInteract ? "#ffffff" : COLORS.cyan;
+      context.fillStyle = accentColor;
       context.beginPath();
       context.arc(-15, -33, 6, 0, Math.PI * 2);
       context.arc(15, -33, 6, 0, Math.PI * 2);
@@ -700,6 +737,64 @@
       if (canInteract) {
         this._drawTag(x, y - 105, "E  INTERAGIR", COLORS.ink);
       }
+    }
+
+    _updateSpeedTrails(robot, now, suppressed = false) {
+      const previous = this.lastRobotPosition;
+      this.lastRobotPosition = { x: robot.x, y: robot.y };
+      if (!previous || suppressed || !robot.moving || !robot.sprinting) return;
+
+      const dx = robot.x - previous.x;
+      const dy = robot.y - previous.y;
+      const distance = Math.hypot(dx, dy);
+      if (distance < 0.5 || distance > 100 || now - this.lastSpeedTrailAt < 45) return;
+
+      this.lastSpeedTrailAt = now;
+      const directionX = dx / distance;
+      const directionY = dy / distance;
+      const perpendicularX = -directionY;
+      const perpendicularY = directionX;
+      for (let index = 0; index < 2; index += 1) {
+        const offset = (Math.random() - 0.5) * 30;
+        const length = 18 + Math.random() * 18;
+        const x = robot.x - directionX * 43 + perpendicularX * offset;
+        const y = robot.y - 24 - directionY * 34 + perpendicularY * offset;
+        this.speedTrails.push({
+          x,
+          y,
+          endX: x - directionX * length,
+          endY: y - directionY * length,
+          age: 0,
+          life: 0.32,
+          maxLife: 0.32,
+          width: 2 + Math.random() * 2,
+        });
+      }
+      if (this.speedTrails.length > 14) {
+        this.speedTrails.splice(0, this.speedTrails.length - 14);
+      }
+    }
+
+    _drawSpeedTrails(delta) {
+      const context = this.context;
+      this.speedTrails = this.speedTrails.filter((trail) => {
+        trail.age += delta;
+        trail.life -= delta;
+        if (trail.life <= 0) return false;
+        const fadeIn = clamp(trail.age / 0.07, 0, 1);
+        const fadeOut = clamp(trail.life / 0.18, 0, 1);
+        context.save();
+        context.globalAlpha = fadeIn * fadeOut * 0.62;
+        context.strokeStyle = COLORS.magenta;
+        context.lineWidth = trail.width;
+        context.lineCap = "round";
+        context.beginPath();
+        context.moveTo(trail.x, trail.y);
+        context.lineTo(trail.endX, trail.endY);
+        context.stroke();
+        context.restore();
+        return true;
+      });
     }
 
     _drawGripHands(x, boxY) {

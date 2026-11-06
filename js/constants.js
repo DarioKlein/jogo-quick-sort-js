@@ -67,6 +67,9 @@
     HEIGHT: 720,
     INITIAL_ARRAY: Object.freeze([8, 3, 12, 5, 1, 10]),
     INITIAL_SCORE: 1000,
+    ERROR_PENALTY: 5,
+    WALK_SPEED: 260,
+    SPRINT_MULTIPLIER: 1.8,
     BOX_START_X: 245,
     BOX_GAP: 158,
     BOX_Y: 344,
@@ -97,7 +100,7 @@
       }),
       Object.freeze({
         title: "Movimento",
-        text: "Use WASD ou as setas para caminhar. Aproxime-se da posição destacada antes de interagir.",
+        text: "Use WASD ou as setas para caminhar e segure Shift para correr. Aproxime-se da posição destacada antes de interagir.",
         art: "linear-gradient(135deg, transparent 35%, rgba(48,230,242,.22) 36% 42%, transparent 43%), linear-gradient(45deg, transparent 35%, rgba(48,230,242,.16) 36% 42%, transparent 43%), #0b2731",
       }),
       Object.freeze({

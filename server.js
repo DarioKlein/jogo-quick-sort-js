@@ -8,6 +8,7 @@ const { randomUUID } = require("node:crypto");
 
 const DEFAULT_PORT = 3000;
 const PLAYER_TIMEOUT_MS = 15_000;
+const PLAYER_RECONNECT_TIMEOUT_MS = 120_000;
 const ROSTER_THROTTLE_MS = 500;
 const MAX_BODY_BYTES = 96 * 1024;
 const PUBLIC_EXTENSIONS = new Set([".html", ".css", ".js", ".png", ".svg", ".ico"]);
@@ -157,6 +158,17 @@ function createSortFactoryServer({
 
   initializeRanking();
 
+  function findResumableSession(token) {
+    if (typeof token !== "string" || token.length < 16) return null;
+    const ranking = [...rankings.values()].find((record) => record.token === token);
+    if (!ranking) return null;
+    const player = [...players.values()].find((candidate) => (
+      candidate.rankingId === ranking.id
+      && candidate.reconnectUntil > Date.now()
+    ));
+    return player ? { player, ranking } : null;
+  }
+
   function summarize(player) {
     return {
       id: player.id,
@@ -262,6 +274,70 @@ function createSortFactoryServer({
       return true;
     }
 
+    if (request.method === "POST" && url.pathname === "/api/players/resume/check") {
+      const body = await readJson(request);
+      const resumable = findResumableSession(body.token);
+      sendJson(response, 200, resumable
+        ? { available: true, name: resumable.player.name }
+        : { available: false });
+      return true;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/players/resume") {
+      const body = await readJson(request);
+      const resumable = findResumableSession(body.token);
+      if (!resumable) {
+        sendJson(response, 404, { error: "A sessão não está mais disponível para recuperação." });
+        return true;
+      }
+
+      const { player, ranking } = resumable;
+      const now = Date.now();
+      player.reconnectUntil = null;
+      player.statusBeforeSuspend = null;
+      player.status = "menu";
+      player.score = 0;
+      player.errors = 0;
+      player.timeMs = 0;
+      player.phaseId = "AVERAGE";
+      player.phaseNumber = 1;
+      player.phaseTitle = "Caso médio";
+      player.gameState = null;
+      player.updatedAt = now;
+      player.lastSeen = now;
+      broadcastRosterPlayer(player);
+      broadcastPlayerState(player);
+      sendJson(response, 200, { id: player.id, name: player.name, token: ranking.token });
+      return true;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/players/resume/discard") {
+      const body = await readJson(request);
+      const resumable = findResumableSession(body.token);
+      if (resumable) removePlayer(resumable.player.id, "resume-declined");
+      sendJson(response, 200, { ok: true });
+      return true;
+    }
+
+    const rankingMatch = url.pathname.match(/^\/api\/ranking\/([a-f0-9-]+)$/i);
+    if (request.method === "DELETE" && rankingMatch) {
+      const rankingId = rankingMatch[1];
+      if (!rankings.has(rankingId)) {
+        sendJson(response, 404, { error: "Jogador não encontrado no ranking." });
+        return true;
+      }
+      const activeSession = [...players.values()].find((player) => player.rankingId === rankingId);
+      if (activeSession) {
+        sendJson(response, 409, { error: "Encerre a sessão do jogador antes de removê-lo do ranking." });
+        return true;
+      }
+      rankings.delete(rankingId);
+      saveRanking();
+      broadcastRanking();
+      sendJson(response, 200, { ok: true });
+      return true;
+    }
+
     if (request.method === "GET" && url.pathname === "/api/events") {
       openEventStream(
         request,
@@ -352,6 +428,8 @@ function createSortFactoryServer({
         lastSeen: now,
         sequence: 0,
         lastRosterBroadcast: 0,
+        reconnectUntil: null,
+        statusBeforeSuspend: null,
       };
       players.set(player.id, player);
       broadcastRosterPlayer(player);
@@ -364,7 +442,7 @@ function createSortFactoryServer({
       return true;
     }
 
-    const playerMatch = url.pathname.match(/^\/api\/players\/([a-f0-9-]+)(?:\/(state|complete|leave))?$/i);
+    const playerMatch = url.pathname.match(/^\/api\/players\/([a-f0-9-]+)(?:\/(state|complete|leave|suspend))?$/i);
     if (!playerMatch) return false;
 
     const player = players.get(playerMatch[1]);
@@ -381,6 +459,19 @@ function createSortFactoryServer({
     if (request.method === "POST" && playerMatch[2] === "leave") {
       removePlayer(player.id);
       sendJson(response, 200, { ok: true });
+      return true;
+    }
+
+    if (request.method === "POST" && playerMatch[2] === "suspend") {
+      const now = Date.now();
+      if (player.status !== "reconectando") player.statusBeforeSuspend = player.status;
+      player.status = "reconectando";
+      player.reconnectUntil = now + PLAYER_RECONNECT_TIMEOUT_MS;
+      player.updatedAt = now;
+      player.lastSeen = now;
+      broadcastRosterPlayer(player);
+      broadcastPlayerState(player);
+      sendJson(response, 200, { ok: true, reconnectUntil: player.reconnectUntil });
       return true;
     }
 
@@ -436,6 +527,7 @@ function createSortFactoryServer({
     if (request.method === "POST" && playerMatch[2] === "state") {
       const body = await readJson(request);
       const now = Date.now();
+      const suspended = player.reconnectUntil > now;
       player.score = toSafeInteger(body.score, player.score);
       player.errors = Math.max(0, toSafeInteger(body.errors, player.errors));
       player.timeMs = Math.max(0, toSafeInteger(body.timeMs, player.timeMs));
@@ -443,8 +535,10 @@ function createSortFactoryServer({
       player.phaseNumber = Math.max(1, toSafeInteger(body.phaseNumber, player.phaseNumber));
       player.phaseTitle = String(body.phaseTitle ?? player.phaseTitle).slice(0, 40);
       player.pivotStrategy = "FIRST";
-      player.status = ["menu", "tutorial", "jogando", "pausado", "concluido"]
-        .includes(body.status) ? body.status : player.status;
+      if (!suspended) {
+        player.status = ["menu", "tutorial", "jogando", "pausado", "concluido"]
+          .includes(body.status) ? body.status : player.status;
+      }
       player.gameState = body.gameState && typeof body.gameState === "object"
         ? body.gameState
         : player.gameState;
@@ -486,7 +580,7 @@ function createSortFactoryServer({
       response.writeHead(200, {
         "Content-Type": CONTENT_TYPES[extension] ?? "application/octet-stream",
         "Content-Length": contents.length,
-        "Cache-Control": "no-cache",
+        "Cache-Control": "no-store",
       });
       response.end(contents);
     });
@@ -517,8 +611,11 @@ function createSortFactoryServer({
 
   const cleanupInterval = setInterval(() => {
     const limit = Date.now() - PLAYER_TIMEOUT_MS;
+    const now = Date.now();
     players.forEach((player) => {
-      if (player.lastSeen < limit) removePlayer(player.id, "timeout");
+      const reconnectExpired = player.reconnectUntil && player.reconnectUntil < now;
+      const regularTimeout = !player.reconnectUntil && player.lastSeen < limit;
+      if (reconnectExpired || regularTimeout) removePlayer(player.id, "timeout");
     });
   }, 3_000);
   cleanupInterval.unref?.();

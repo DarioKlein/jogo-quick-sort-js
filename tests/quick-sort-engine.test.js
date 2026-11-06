@@ -10,7 +10,7 @@ require(path.join(__dirname, "..", "js", "constants.js"));
 require(path.join(__dirname, "..", "js", "utils.js"));
 require(path.join(__dirname, "..", "js", "quick-sort-engine.js"));
 
-const { GameState, PivotStrategy, PhaseId, PHASES } = global.SortFactory.Constants;
+const { GameState, PivotStrategy, PhaseId, PHASES, ERROR_PENALTY } = global.SortFactory.Constants;
 const { QuickSortEngine } = global.SortFactory;
 
 function completePhase(engine) {
@@ -70,8 +70,13 @@ function testInvalidActionIsSafe() {
   assert.equal(result.ok, false);
   assert.deepEqual(engine.values, originalValues);
   assert.equal(engine.errors, 1);
-  assert.equal(engine.score, originalScore - 40);
+  assert.equal(engine.score, originalScore - ERROR_PENALTY);
   assert.equal(engine.state, GameState.INSPECT_I);
+
+  const invalidSwap = engine.selectForSwap(engine.i);
+  assert.equal(invalidSwap.ok, false);
+  assert.equal(engine.errors, 2);
+  assert.equal(engine.score, originalScore - ERROR_PENALTY * 2);
 }
 
 function testTwoElementSegment() {

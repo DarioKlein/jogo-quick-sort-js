@@ -24,6 +24,11 @@
         playerNameError: document.querySelector("#player-name-error"),
         start: document.querySelector("#start-modal"),
         startMission: document.querySelector("#start-mission-button"),
+        resume: document.querySelector("#resume-modal"),
+        resumePlayerName: document.querySelector("#resume-player-name"),
+        resumeError: document.querySelector("#resume-error"),
+        resumeSession: document.querySelector("#resume-session"),
+        resumeNewSession: document.querySelector("#resume-new-session"),
         tutorial: document.querySelector("#tutorial-modal"),
         tutorialTitle: document.querySelector("#tutorial-title"),
         tutorialText: document.querySelector("#tutorial-text"),
@@ -48,6 +53,8 @@
       this.onTutorialVisibilityChange = () => {};
       this.onRestart = () => {};
       this.onStart = () => {};
+      this.onResume = () => {};
+      this.onResumeDecline = () => {};
       this.onPlayAgain = () => {};
 
       this._bindEvents();
@@ -115,9 +122,36 @@
         : labels[state] ?? "ONLINE";
     }
 
-    setStartPending(isPending) {
+    setStartPending(isPending, pendingLabel = "Entrando na sala…") {
       this.elements.startMission.disabled = isPending;
-      this.elements.startMission.textContent = isPending ? "Entrando na sala…" : "Iniciar desafio";
+      this.elements.startMission.textContent = isPending ? pendingLabel : "Iniciar desafio";
+    }
+
+    showResumePrompt(name) {
+      this.elements.start.classList.add("modal--hidden");
+      this.elements.resumePlayerName.textContent = name;
+      this.elements.resumeError.textContent = "";
+      this.elements.resume.classList.remove("modal--hidden");
+      this.onTutorialVisibilityChange(true);
+      window.setTimeout(() => this.elements.resumeSession.focus(), 0);
+    }
+
+    hideResumePrompt({ showStart = false } = {}) {
+      this.elements.resume.classList.add("modal--hidden");
+      if (showStart) {
+        this.elements.start.classList.remove("modal--hidden");
+        window.setTimeout(() => this.elements.playerName.focus(), 0);
+      }
+    }
+
+    setResumePending(isPending) {
+      this.elements.resumeSession.disabled = isPending;
+      this.elements.resumeNewSession.disabled = isPending;
+      this.elements.resumeSession.textContent = isPending ? "Recuperando…" : "Continuar sessão";
+    }
+
+    showResumeError(message) {
+      this.elements.resumeError.textContent = message;
     }
 
     showStartError(message) {
@@ -143,10 +177,18 @@
       window.setTimeout(() => this.elements.tutorialNext.focus(), 0);
     }
 
-    showStartMenu() {
+    showStartMenu({ resetPlayerName = false, message = "" } = {}) {
       this.elements.victory.classList.add("modal--hidden");
       this.elements.tutorial.classList.add("modal--hidden");
+      this.elements.resume.classList.add("modal--hidden");
       this.elements.start.classList.remove("modal--hidden");
+      if (resetPlayerName) {
+        this.playerName = "";
+        this.elements.playerName.value = "";
+        this.elements.playerName.readOnly = false;
+        this.setConnectionState("offline");
+      }
+      this.showStartError(message);
       this.onTutorialVisibilityChange(true);
       window.setTimeout(() => this.elements.playerName.focus(), 0);
     }
@@ -192,6 +234,8 @@
         this.showStartError("");
         this.onStart(playerName);
       });
+      this.elements.resumeSession.addEventListener("click", () => this.onResume());
+      this.elements.resumeNewSession.addEventListener("click", () => this.onResumeDecline());
       this.elements.playerName.addEventListener("input", () => this.showStartError(""));
       this.elements.playerName.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
@@ -201,16 +245,14 @@
       });
       this.elements.tutorialSkip.addEventListener("click", () => this.closeTutorial());
       this.elements.tutorialBack.addEventListener("click", () => {
-        this.tutorialIndex = Math.max(0, this.tutorialIndex - 1);
-        this._renderTutorialPage();
+        this._changeTutorialPage(-1);
       });
       this.elements.tutorialNext.addEventListener("click", () => {
         if (this.tutorialIndex === TUTORIAL_PAGES.length - 1) {
           this.closeTutorial();
           return;
         }
-        this.tutorialIndex += 1;
-        this._renderTutorialPage();
+        this._changeTutorialPage(1);
       });
 
       document.addEventListener("keydown", (event) => {
@@ -221,7 +263,14 @@
       });
     }
 
-    _renderTutorialPage() {
+    _changeTutorialPage(offset) {
+      const nextIndex = Math.max(0, Math.min(TUTORIAL_PAGES.length - 1, this.tutorialIndex + offset));
+      if (nextIndex === this.tutorialIndex) return;
+      this.tutorialIndex = nextIndex;
+      this._renderTutorialPage(offset > 0 ? "forward" : "back");
+    }
+
+    _renderTutorialPage(direction = null) {
       const page = TUTORIAL_PAGES[this.tutorialIndex];
       this.elements.tutorialTitle.textContent = page.title;
       this.elements.tutorialText.textContent = this.tutorialIndex === 0
@@ -234,13 +283,27 @@
       this.elements.tutorialNext.textContent = this.tutorialIndex === TUTORIAL_PAGES.length - 1
         ? "Iniciar run"
         : "Avançar";
-      this.elements.tutorialDots.replaceChildren(
-        ...TUTORIAL_PAGES.map((_, index) => {
+      if (this.elements.tutorialDots.children.length !== TUTORIAL_PAGES.length) {
+        this.elements.tutorialDots.replaceChildren(
+          ...TUTORIAL_PAGES.map(() => {
           const dot = document.createElement("i");
-          dot.classList.toggle("is-active", index === this.tutorialIndex);
+          dot.setAttribute("aria-hidden", "true");
           return dot;
-        }),
+          }),
+        );
+      }
+      [...this.elements.tutorialDots.children].forEach((dot, index) => {
+        dot.classList.toggle("is-active", index === this.tutorialIndex);
+      });
+      this.elements.tutorialDots.classList.remove(
+        "tutorial-dots--forward",
+        "tutorial-dots--back",
       );
+      if (direction) {
+        // Force a fresh animation even when the same direction is used twice in a row.
+        void this.elements.tutorialDots.offsetWidth;
+        this.elements.tutorialDots.classList.add(`tutorial-dots--${direction}`);
+      }
     }
   }
 

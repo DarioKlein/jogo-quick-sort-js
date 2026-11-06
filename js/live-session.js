@@ -29,8 +29,9 @@
       this.hasSpectators = false;
       this.connectionState = "offline";
       this.onConnectionChange = () => {};
+      this.onSessionEnded = () => {};
 
-      window.addEventListener("pagehide", () => this.leave());
+      window.addEventListener("pagehide", () => this.suspend());
     }
 
     async join(name) {
@@ -51,14 +52,61 @@
         throw new Error(result.error || "Não foi possível entrar na sessão da sala.");
       }
 
-      this.playerId = result.id;
-      this.playerName = result.name;
-      this._saveIdentity({ name: result.name, token: result.token });
-      this._setConnectionState("online");
-      this.heartbeatTimer = window.setInterval(() => {
-        if (this.latestPayload) this.publish(this.latestPayload, true);
-      }, HEARTBEAT_INTERVAL_MS);
+      this._activate(result);
       return result;
+    }
+
+    getSavedIdentity() {
+      const identity = this._readIdentity();
+      if (typeof identity?.name !== "string" || typeof identity?.token !== "string") return null;
+      return { name: identity.name, token: identity.token };
+    }
+
+    async checkResumableSession() {
+      const identity = this.getSavedIdentity();
+      if (!identity) return null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const response = await fetch("/api/players/resume/check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: identity.token }),
+        });
+        if (!response.ok) return null;
+        const result = await response.json().catch(() => ({}));
+        if (result.available) return { name: result.name || identity.name };
+        if (attempt < 2) {
+          await new Promise((resolve) => window.setTimeout(resolve, 150));
+        }
+      }
+      return null;
+    }
+
+    async resume() {
+      const identity = this.getSavedIdentity();
+      if (!identity) throw new Error("Identidade salva não encontrada.");
+      this._setConnectionState("connecting");
+      const response = await fetch("/api/players/resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: identity.token }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        this._setConnectionState("error");
+        throw new Error(result.error || "Não foi possível recuperar a sessão.");
+      }
+      this._activate(result);
+      return result;
+    }
+
+    async discardResumableSession() {
+      const identity = this.getSavedIdentity();
+      if (!identity) return;
+      await fetch("/api/players/resume/discard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: identity.token }),
+      }).catch(() => {});
     }
 
     async completeRun(run) {
@@ -69,6 +117,11 @@
         body: JSON.stringify(run),
       });
       const result = await response.json().catch(() => ({}));
+      if (response.status === 404) {
+        this._endSession();
+        this._setConnectionState("error");
+        this.onSessionEnded();
+      }
       if (!response.ok) throw new Error(result.error || "Não foi possível registrar a run.");
       return result;
     }
@@ -102,6 +155,16 @@
       this.playerId = null;
     }
 
+    suspend() {
+      if (!this.playerId) return;
+      window.clearTimeout(this.sendTimer);
+      window.clearInterval(this.heartbeatTimer);
+      navigator.sendBeacon?.(`/api/players/${this.playerId}/suspend`, new Blob(["{}"], {
+        type: "application/json",
+      }));
+      this.playerId = null;
+    }
+
     async _flush() {
       if (!this.playerId || !this.latestPayload || this.sending) return;
       this.sending = true;
@@ -113,6 +176,13 @@
           body: JSON.stringify(payload),
           keepalive: true,
         });
+        if (response.status === 404) {
+          if (!this.playerId) return;
+          this._endSession();
+          this._setConnectionState("error");
+          this.onSessionEnded();
+          return;
+        }
         if (!response.ok) throw new Error("Sessão indisponível.");
         const result = await response.json();
         this.hasSpectators = result.spectators > 0;
@@ -124,6 +194,28 @@
         this.sending = false;
         if (payload !== this.latestPayload) this.publish(this.latestPayload);
       }
+    }
+
+    _endSession() {
+      window.clearTimeout(this.sendTimer);
+      window.clearInterval(this.heartbeatTimer);
+      this.playerId = null;
+      this.playerName = "";
+      this.latestPayload = null;
+      this.hasSpectators = false;
+    }
+
+    _activate(result) {
+      window.clearInterval(this.heartbeatTimer);
+      this.playerId = result.id;
+      this.playerName = result.name;
+      this.latestPayload = null;
+      this.hasSpectators = false;
+      this._saveIdentity({ name: result.name, token: result.token });
+      this._setConnectionState("online");
+      this.heartbeatTimer = window.setInterval(() => {
+        if (this.latestPayload) this.publish(this.latestPayload, true);
+      }, HEARTBEAT_INTERVAL_MS);
     }
 
     _setConnectionState(state) {

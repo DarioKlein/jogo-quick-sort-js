@@ -50,4 +50,20 @@ input._onKeyUp(releaseInInput);
 assert.equal(releaseInInput.defaultPrevented, false);
 assert.equal(input.keysDown.has("KeyD"), false, "soltar a tecla sempre deve limpar o movimento");
 
-console.log("✓ InputController: digitação livre em campos e WASD ativo no jogo");
+const sprintEvent = keyboardEvent("ShiftLeft");
+input._onKeyDown(sprintEvent);
+assert.equal(sprintEvent.defaultPrevented, false, "Shift não deve ser interceptado");
+assert.equal(input.isSprinting(), true, "Shift esquerdo deve ativar o sprint");
+input._onKeyUp(sprintEvent);
+assert.equal(input.isSprinting(), false, "soltar Shift deve desativar o sprint");
+
+input._onKeyDown(keyboardEvent("ShiftRight"));
+assert.equal(input.isSprinting(), true, "Shift direito também deve ativar o sprint");
+
+input.enabled = false;
+assert.equal(input.isSprinting(), false, "controles pausados não devem permitir sprint");
+input.enabled = true;
+input.clear();
+assert.equal(input.isSprinting(), false, "limpar os controles deve encerrar o sprint");
+
+console.log("✓ InputController: digitação livre em campos, WASD ativo e sprint com Shift");

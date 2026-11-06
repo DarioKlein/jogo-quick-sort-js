@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "check": "node --check server.js && node --check js/constants.js && node --check js/utils.js && node --check js/quick-sort-engine.js && node --check js/input-controller.js && node --check js/ui-controller.js && node --check js/renderer.js && node --check js/live-session.js && node --check js/run-scoring.js && node --check js/spectator-buffer.js && node --check js/dev-dashboard.js && node --check js/game.js",
-    "test": "node tests/quick-sort-engine.test.js && node tests/renderer-smoke.test.js && node tests/input-controller.test.js && node tests/live-session.test.js && node tests/run-scoring.test.js && node tests/spectator-buffer.test.js && node tests/dom-contract.test.js && node tests/server.test.js"
+    "test": "node tests/quick-sort-engine.test.js && node tests/renderer-smoke.test.js && node tests/input-controller.test.js && node tests/live-session.test.js && node tests/run-scoring.test.js && node tests/spectator-buffer.test.js && node tests/dom-contract.test.js && node tests/ui-controller.test.js && node tests/dev-dashboard.test.js && node tests/server.test.js"
   },
   "engines": {
     "node": ">=18"

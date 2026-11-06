@@ -50,5 +50,8 @@ assert.ok(
   devHtml.indexOf("js/spectator-buffer.js") < devHtml.indexOf("js/dev-dashboard.js"),
   "spectator-buffer.js deve carregar antes do painel do espectador",
 );
+assert.match(gameHtml, /js\/renderer\.js\?v=/, "jogo deve invalidar o cache dos scripts");
+assert.match(devHtml, /dev\.css\?v=/, "painel deve invalidar o cache do CSS");
+assert.match(devHtml, /js\/dev-dashboard\.js\?v=/, "painel deve invalidar o cache dos scripts");
 
 console.log("✓ DOM: contratos de elementos e ordem dos módulos");
