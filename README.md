@@ -44,6 +44,7 @@ Chrome/Chromium, Edge e Firefox recentes são suportados.
 - `Shift`: correr enquanto se movimenta;
 - `E` ou `Espaço`: inspecionar ou selecionar a caixa próxima;
 - `P`: pausar ou continuar a run;
+- `R`: reiniciar imediatamente a run;
 - `Esc`: fechar o tutorial;
 - `F` ou **Tela cheia**: alternar entre tela cheia e a janela normal; `Esc` também encerra a tela cheia;
 - **Como jogar**: reabrir o tutorial;

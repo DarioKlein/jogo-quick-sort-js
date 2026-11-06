@@ -46,6 +46,7 @@ assert.ok(
 );
 assert.match(gameHtml, /<kbd>F<\/kbd> tela cheia/);
 assert.match(gameHtml, /<kbd>P<\/kbd> pausar/);
+assert.match(gameHtml, /<kbd>R<\/kbd> reiniciar/);
 assert.doesNotMatch(gameHtml, /class="legend"/);
 assert.ok(
   gameHtml.indexOf('class="controls-hint"') > gameHtml.indexOf('class="algorithm-strip"'),

@@ -102,8 +102,10 @@ assert.equal(dots.classList.contains("tutorial-dots--back"), true);
 assert.equal(dots.children[0].classList.contains("is-active"), true);
 
 let pauseRequested = 0;
+let restartRequested = 0;
 const menuVisibilityChanges = [];
 ui.onPauseToggle = () => { pauseRequested += 1; };
+ui.onRestart = () => { restartRequested += 1; };
 ui.onMenuVisibilityChange = (isOpen) => menuVisibilityChanges.push(isOpen);
 const menuToggle = elements.get("#menu-toggle-button");
 const topbarMenu = elements.get("#topbar-menu");
@@ -189,6 +191,24 @@ async function testFullscreenToggle() {
     preventDefault() { throw new Error("atalho de pausa não deve capturar digitação"); },
   });
   assert.equal(pauseRequested, 3);
+
+  let restartShortcutPrevented = false;
+  await documentListeners.keydown({
+    code: "KeyR",
+    repeat: false,
+    target: { tagName: "BODY" },
+    preventDefault() { restartShortcutPrevented = true; },
+  });
+  assert.equal(restartShortcutPrevented, true);
+  assert.equal(restartRequested, 1);
+
+  await documentListeners.keydown({
+    code: "KeyR",
+    repeat: false,
+    target: { tagName: "INPUT" },
+    preventDefault() { throw new Error("atalho de reinício não deve capturar digitação"); },
+  });
+  assert.equal(restartRequested, 1);
 }
 
 testFullscreenToggle()

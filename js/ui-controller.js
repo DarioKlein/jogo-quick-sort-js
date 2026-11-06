@@ -330,6 +330,18 @@
           event.preventDefault();
           return this._toggleFullscreen();
         }
+        if (
+          event.code === "KeyR"
+          && !event.repeat
+          && !isEditable
+          && !hasShortcutModifier
+        ) {
+          event.preventDefault();
+          this._setMenuOpen(false);
+          if (this.isTutorialOpen()) this.closeTutorial();
+          this.onRestart();
+          return undefined;
+        }
         if (event.code === "Escape" && this.isTutorialOpen()) {
           event.preventDefault();
           this.closeTutorial();
