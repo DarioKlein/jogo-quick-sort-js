@@ -106,6 +106,49 @@ assert.doesNotThrow(() => renderer.draw({
   victory: false,
 }));
 
+renderer.victoryStartedAt = 4000;
+assert.equal(renderer._getVictoryBoxOffset(4100, true), 0, "caixas aguardam a linha ser liberada");
+const conveyorExitOffset = renderer._getVictoryBoxOffset(5000, true);
+assert.ok(
+  conveyorExitOffset > 0 && conveyorExitOffset < 1180,
+  "caixas ordenadas devem avançar pela esteira antes de sair da fábrica",
+);
+assert.equal(renderer._getVictoryBoxOffset(6000, true), 1180, "lote deve terminar fora da linha");
+renderer.victoryStartedAt = null;
+
+assert.deepEqual(
+  renderer._getBoxEntranceState(2, 6, null),
+  { visible: true, x: renderer.boxX(2) },
+  "sem entrada ativa as caixas ficam nas posições",
+);
+assert.deepEqual(
+  renderer._getBoxEntranceState(4, 6, 0),
+  { visible: false, x: 82 },
+  "as caixas devem aguardar sua vez dentro do alimentador",
+);
+assert.deepEqual(
+  renderer._getBoxEntranceState(5, 6, 0),
+  { visible: true, x: 82 },
+  "a caixa mais distante deve ser liberada primeiro pelo portal",
+);
+const enteringBox = renderer._getBoxEntranceState(4, 6, 0.25);
+assert.ok(
+  enteringBox.visible && enteringBox.x > 82 && enteringBox.x < renderer.boxX(0),
+  "cada nova caixa deve emergir do portal até o primeiro espaço",
+);
+const shiftedBox = renderer._getBoxEntranceState(5, 6, 0.25);
+assert.ok(
+  shiftedBox.x > renderer.boxX(0) && shiftedBox.x < renderer.boxX(1),
+  "a esteira deve avançar as caixas anteriores para abrir espaço",
+);
+for (let index = 0; index < baseSnapshot.values.length; index += 1) {
+  assert.deepEqual(
+    renderer._getBoxEntranceState(index, baseSnapshot.values.length, 1),
+    { visible: true, x: renderer.boxX(index) },
+    "todas as caixas devem terminar alinhadas em suas posições",
+  );
+}
+
 const runningRobot = { ...robot, moving: true, sprinting: true };
 const runningMotion = renderer._getRobotMotion(runningRobot, 3500);
 const actionMotion = renderer._getRobotMotion(runningRobot, 3500, true);

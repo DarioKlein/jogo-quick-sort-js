@@ -16,6 +16,18 @@
 
   const PICKUP_DURATION = 270;
   const POSE_TRANSITION_DURATION = 150;
+  const VICTORY_CONVEYOR_DELAY = 180;
+  const VICTORY_CONVEYOR_DURATION = 1450;
+  const PROFILE_FAR_ARM_ALPHA = 0.52;
+  const BOX_ENTRY_X = 82;
+  const PIPE_GEAR_WINDUP_MS = 1200;
+  const RobotAnimation = Object.freeze({
+    IDLE: "idle",
+    WALK: "walk",
+    CARRY: "carry",
+    INTERACT: "interact",
+    PLACE: "place",
+  });
 
   class Renderer {
     constructor(canvas) {
@@ -24,11 +36,14 @@
       this.pointerPositions = { i: BOX_START_X, j: BOX_START_X };
       this.particles = [];
       this.speedTrails = [];
+      this.pipeSmoke = [];
+      this.nextPipeSmokeAt = performance.now() + 1200 + Math.random() * 1800;
       this.lastRobotPosition = null;
       this.lastSpeedTrailAt = Number.NEGATIVE_INFINITY;
       this.lastSelectedIndex = null;
       this.pickupStartedAt = 0;
       this.robotPose = { side: 0, back: 0, lastTime: null };
+      this.victoryStartedAt = null;
       this.lastTime = performance.now();
       this.lockedPattern = this._createLockedPattern();
     }
@@ -43,16 +58,27 @@
       this.lastTime = now;
       const context = this.context;
 
+      if (frame.victory) {
+        this.victoryStartedAt ??= now;
+      } else {
+        this.victoryStartedAt = null;
+      }
+
       context.clearRect(0, 0, WIDTH, HEIGHT);
-      this._drawBackground(now);
+      this._drawBackground(now, frame.victory, delta);
       const suppressSpeedTrail = frame.paused
         || frame.modalOpen
         || ["handoff", "placing"].includes(frame.manualSwap?.phase);
       this._updateSpeedTrails(frame.robot, now, suppressSpeedTrail);
       this._drawSegmentZones(frame.snapshot);
-      this._drawConveyor(now, frame.victory);
+      this._drawConveyor(
+        now,
+        frame.victory || Number.isFinite(frame.boxEntranceProgress),
+      );
       this._drawSpeedTrails(delta);
       this._drawBoxes(frame, now);
+      this._drawConveyorForeground(now, frame.victory);
+      this._drawActiveZoneFrame(frame.snapshot);
       this._drawPointers(frame.snapshot, delta, now);
 
       if (frame.manualSwap) {
@@ -127,10 +153,13 @@
     resetEffects() {
       this.particles = [];
       this.speedTrails = [];
+      this.pipeSmoke = [];
+      this.nextPipeSmokeAt = performance.now() + 1200 + Math.random() * 1800;
       this.lastRobotPosition = null;
       this.lastSpeedTrailAt = Number.NEGATIVE_INFINITY;
       this.lastSelectedIndex = null;
       this.robotPose = { side: 0, back: 0, lastTime: null };
+      this.victoryStartedAt = null;
     }
 
     _createLockedPattern() {
@@ -157,29 +186,34 @@
       return this.context.createPattern(tile, "repeat");
     }
 
-    _drawBackground(now) {
+    _drawBackground(now, victory = false, delta = 0) {
       const context = this.context;
       const gradient = context.createLinearGradient(0, 0, 0, HEIGHT);
-      gradient.addColorStop(0, "#071c25");
-      gradient.addColorStop(0.68, "#0d2a32");
-      gradient.addColorStop(1, "#07171d");
+      gradient.addColorStop(0, "#071820");
+      gradient.addColorStop(0.62, "#102c33");
+      gradient.addColorStop(1, "#07171c");
       context.fillStyle = gradient;
       context.fillRect(0, 0, WIDTH, HEIGHT);
 
       context.save();
-      context.globalAlpha = 0.22;
-      context.strokeStyle = "#2d6670";
-      context.lineWidth = 2;
-      for (let x = -60; x < WIDTH + 80; x += 120) {
+      context.strokeStyle = "rgba(66,111,119,.2)";
+      context.lineWidth = 1.5;
+      for (let x = 18; x < WIDTH; x += 158) {
         context.beginPath();
         context.moveTo(x, 0);
-        context.lineTo(x + 170, HEIGHT);
+        context.lineTo(x, 560);
+        context.stroke();
+      }
+      for (let y = 82; y < 560; y += 118) {
+        context.beginPath();
+        context.moveTo(0, y);
+        context.lineTo(WIDTH, y);
         context.stroke();
       }
       context.restore();
 
-      this._drawPipes();
-      this._drawFactoryMachines(now);
+      this._drawPipes(now, delta);
+      this._drawFactoryMachines(now, victory);
 
       context.fillStyle = "#0a2027";
       context.fillRect(0, 560, WIDTH, 160);
@@ -193,58 +227,307 @@
       }
       context.fillStyle = "rgba(48,230,242,.08)";
       context.fillRect(0, 560, WIDTH, 3);
+
+      context.save();
+      context.globalAlpha = 0.28;
+      context.fillStyle = "#ffc845";
+      for (let x = 24; x < WIDTH; x += 96) {
+        context.beginPath();
+        context.moveTo(x, 692);
+        context.lineTo(x + 22, 692);
+        context.lineTo(x + 58, 632);
+        context.lineTo(x + 36, 632);
+        context.closePath();
+        context.fill();
+      }
+      context.restore();
     }
 
-    _drawPipes() {
+    _drawPipes(now, delta = 0) {
       const context = this.context;
+      this._drawPipeSmoke(now, delta);
       context.save();
       context.lineCap = "round";
       context.lineJoin = "round";
-      context.strokeStyle = "#173e47";
-      context.lineWidth = 25;
+
+      context.strokeStyle = "#102f37";
+      context.lineWidth = 9;
       context.beginPath();
-      context.moveTo(0, 94);
-      context.lineTo(154, 94);
-      context.lineTo(154, 205);
-      context.lineTo(230, 205);
+      context.moveTo(-12, 45);
+      context.lineTo(112, 45);
+      context.lineTo(112, 68);
+      context.lineTo(205, 68);
+      context.lineTo(205, 92);
+      context.moveTo(-12, 166);
+      context.lineTo(92, 166);
+      context.lineTo(92, 124);
+      context.lineTo(176, 124);
+      context.lineTo(176, 92);
       context.stroke();
-      context.strokeStyle = "#2a5961";
-      context.lineWidth = 5;
+      context.strokeStyle = "rgba(64,108,116,.38)";
+      context.lineWidth = 2;
+      context.stroke();
+      context.strokeStyle = "#315d65";
+      context.lineWidth = 4;
+      context.beginPath();
+      context.moveTo(199, 77);
+      context.lineTo(211, 77);
+      context.moveTo(170, 113);
+      context.lineTo(182, 113);
       context.stroke();
 
-      context.strokeStyle = "#163943";
-      context.lineWidth = 18;
+      context.strokeStyle = "#163b43";
+      context.lineWidth = 22;
       context.beginPath();
-      context.moveTo(1010, 0);
-      context.lineTo(1010, 110);
-      context.lineTo(1280, 110);
+      context.moveTo(-20, 92);
+      context.lineTo(250, 92);
+      context.lineTo(250, 146);
+      context.lineTo(420, 146);
+      context.stroke();
+      context.strokeStyle = "#2a5961";
+      context.lineWidth = 4;
+      context.stroke();
+
+      context.fillStyle = "#173b44";
+      context.strokeStyle = "#44747c";
+      context.lineWidth = 3;
+      roundedRect(context, 414, 135, 31, 22, 4);
+      context.fill();
+      context.stroke();
+      context.strokeStyle = "#294f57";
+      context.lineWidth = 2;
+      context.beginPath();
+      context.moveTo(423, 136);
+      context.lineTo(423, 156);
+      context.moveTo(432, 136);
+      context.lineTo(432, 156);
+      context.stroke();
+
+      context.fillStyle = "#1d4851";
+      context.strokeStyle = "#4e7e86";
+      context.lineWidth = 3;
+      context.beginPath();
+      context.moveTo(443, 135);
+      context.lineTo(460, 128);
+      context.lineTo(460, 164);
+      context.lineTo(443, 157);
+      context.closePath();
+      context.fill();
+      context.stroke();
+      context.fillStyle = "#07191e";
+      context.strokeStyle = "#789aa0";
+      context.lineWidth = 2;
+      context.beginPath();
+      context.ellipse(460, 146, 5, 18, 0, 0, Math.PI * 2);
+      context.fill();
+      context.stroke();
+
+      context.strokeStyle = "#6d9299";
+      context.lineWidth = 6;
+      context.beginPath();
+      context.moveTo(414, 130);
+      context.lineTo(414, 162);
+      context.stroke();
+
+      context.strokeStyle = "#153740";
+      context.lineWidth = 16;
+      context.beginPath();
+      context.moveTo(880, -12);
+      context.lineTo(880, 88);
+      context.lineTo(1300, 88);
+      context.stroke();
+
+      this._drawPipeGear(134, 124, this._getPipeGearRotation(now));
+
+      context.fillStyle = "#0b2229";
+      context.strokeStyle = "#39717a";
+      context.lineWidth = 2.5;
+      context.beginPath();
+      context.arc(250, 92, 19, 0, Math.PI * 2);
+      context.fill();
+      context.stroke();
+      context.strokeStyle = "#ffc845";
+      context.lineWidth = 3;
+      context.beginPath();
+      context.moveTo(250, 92);
+      context.lineTo(250 + Math.cos(now / 1800) * 11, 92 + Math.sin(now / 1800) * 11);
       context.stroke();
       context.restore();
     }
 
-    _drawFactoryMachines(now) {
+    _drawPipeGear(x, y, rotation = 0) {
+      const context = this.context;
+      context.save();
+      context.translate(x, y);
+      context.rotate(rotation);
+      context.fillStyle = "#31747c";
+
+      for (let index = 0; index < 8; index += 1) {
+        context.save();
+        context.rotate((Math.PI * 2 * index) / 8);
+        roundedRect(context, -4, -21, 8, 7, 1.5);
+        context.fill();
+        context.restore();
+      }
+
+      context.strokeStyle = "#4d8991";
+      context.lineWidth = 1.5;
+      context.beginPath();
+      context.arc(0, 0, 16, 0, Math.PI * 2);
+      context.fill();
+      context.stroke();
+
+      context.fillStyle = "#0d343b";
+      for (let index = 0; index < 5; index += 1) {
+        context.save();
+        context.rotate((Math.PI * 2 * index) / 5);
+        context.beginPath();
+        context.ellipse(0, -10, 3.2, 5.6, 0, 0, Math.PI * 2);
+        context.fill();
+        context.restore();
+      }
+
+      context.fillStyle = "#123b43";
+      context.strokeStyle = "#73a5ab";
+      context.lineWidth = 2;
+      context.beginPath();
+      context.arc(0, 0, 6.5, 0, Math.PI * 2);
+      context.fill();
+      context.stroke();
+      context.fillStyle = COLORS.gold;
+      context.beginPath();
+      context.arc(0, 0, 2.5, 0, Math.PI * 2);
+      context.fill();
+      context.restore();
+    }
+
+    _getPipeGearRotation(now) {
+      const timeUntilEmission = this.nextPipeSmokeAt - now;
+      if (timeUntilEmission >= PIPE_GEAR_WINDUP_MS) return 0;
+      const progress = clamp(
+        1 - Math.max(0, timeUntilEmission) / PIPE_GEAR_WINDUP_MS,
+        0,
+        1,
+      );
+      let mechanicalProgress;
+      if (progress < 0.2) {
+        const acceleration = progress / 0.2;
+        mechanicalProgress = acceleration * acceleration * 0.12;
+      } else if (progress < 0.8) {
+        mechanicalProgress = 0.12 + ((progress - 0.2) / 0.6) * 0.76;
+      } else {
+        const deceleration = (progress - 0.8) / 0.2;
+        mechanicalProgress = 0.88 + (1 - (1 - deceleration) ** 2) * 0.12;
+      }
+      const toothEngagement = Math.sin(progress * Math.PI * 16)
+        * Math.sin(progress * Math.PI)
+        * 0.012;
+      return mechanicalProgress * Math.PI * 2 + toothEngagement;
+    }
+
+    _drawPipeSmoke(now, delta = 0) {
+      const context = this.context;
+      if (now >= this.nextPipeSmokeAt) {
+        const puffCount = 3 + Math.floor(Math.random() * 3);
+        for (let index = 0; index < puffCount; index += 1) {
+          const life = 1.15 + Math.random() * 0.65;
+          this.pipeSmoke.push({
+            x: 465 + Math.random() * 5,
+            y: 146 + (Math.random() - 0.5) * 8,
+            vx: 18 + Math.random() * 18,
+            vy: -8 - Math.random() * 16,
+            radius: 5 + Math.random() * 5,
+            life,
+            maxLife: life,
+          });
+        }
+        this.nextPipeSmokeAt = now + 1700 + Math.random() * 3200;
+      }
+
+      this.pipeSmoke = this.pipeSmoke.filter((puff) => {
+        puff.x += puff.vx * delta;
+        puff.y += puff.vy * delta;
+        puff.radius += 7 * delta;
+        puff.life -= delta;
+        if (puff.life <= 0) return false;
+
+        const progress = 1 - puff.life / puff.maxLife;
+        const fadeIn = clamp(progress / 0.18, 0, 1);
+        const fadeOut = clamp(puff.life / 0.55, 0, 1);
+        context.save();
+        context.globalAlpha = fadeIn * fadeOut * 0.24;
+        context.fillStyle = "#b5cdd1";
+        context.beginPath();
+        context.arc(puff.x, puff.y, puff.radius, 0, Math.PI * 2);
+        context.fill();
+        context.restore();
+        return true;
+      });
+    }
+
+    _drawFactoryMachines(now, victory = false) {
       const context = this.context;
       const pulse = 0.55 + Math.sin(now / 430) * 0.2;
-      context.fillStyle = "#0c2a33";
-      context.strokeStyle = "#29515a";
-      context.lineWidth = 3;
-      roundedRect(context, 36, 238, 142, 226, 12);
-      context.fill();
-      context.stroke();
-      context.fillStyle = `rgba(48,230,242,${pulse})`;
-      context.fillRect(65, 275, 84, 6);
-      context.fillStyle = "#173b43";
-      for (let y = 315; y < 420; y += 28) context.fillRect(62, y, 90, 9);
 
-      context.fillStyle = "#0a242d";
-      context.strokeStyle = "#244b54";
-      roundedRect(context, 1110, 210, 126, 250, 10);
+      context.save();
+      context.fillStyle = "#09232b";
+      context.strokeStyle = "#315b63";
+      context.lineWidth = 3;
+      roundedRect(context, 6, 190, 180, 226, 12);
       context.fill();
       context.stroke();
-      context.fillStyle = `rgba(255,200,69,${pulse})`;
-      context.beginPath();
-      context.arc(1174, 262, 10, 0, Math.PI * 2);
+      context.fillStyle = "#06151a";
+      roundedRect(context, 6, 278, 156, 126, 7);
       context.fill();
+      context.stroke();
+      context.fillStyle = `rgba(48,230,242,${0.55 + pulse * 0.25})`;
+      context.beginPath();
+      context.arc(159, 226, 8, 0, Math.PI * 2);
+      context.fill();
+      context.fillStyle = "#d3e6e9";
+      context.font = "900 11px Bahnschrift, Segoe UI";
+      context.textAlign = "left";
+      context.fillText("ALIMENTAÇÃO", 28, 230);
+      context.fillStyle = COLORS.cyan;
+      context.font = "800 9px Bahnschrift, Segoe UI";
+      context.fillText("LIBERANDO CARGA", 28, 251);
+
+      context.fillStyle = "#09232b";
+      context.strokeStyle = "#315b63";
+      roundedRect(context, 1094, 190, 180, 226, 12);
+      context.fill();
+      context.stroke();
+      context.fillStyle = "#06151a";
+      roundedRect(context, 1118, 278, 156, 126, 7);
+      context.fill();
+      context.strokeStyle = victory ? COLORS.green : "#315b63";
+      context.stroke();
+      context.fillStyle = victory
+        ? `rgba(101,237,154,${0.7 + pulse * 0.25})`
+        : `rgba(255,200,69,${pulse})`;
+      context.beginPath();
+      context.arc(1121, 226, 8, 0, Math.PI * 2);
+      context.fill();
+      context.fillStyle = "#d3e6e9";
+      context.font = "900 11px Bahnschrift, Segoe UI";
+      context.fillText("EXPEDIÇÃO", 1140, 230);
+      context.fillStyle = victory ? COLORS.green : COLORS.muted;
+      context.font = "800 9px Bahnschrift, Segoe UI";
+      context.fillText(victory ? "LOTE LIBERADO" : "AGUARDANDO TRIAGEM", 1120, 251);
+
+      context.fillStyle = "rgba(4,18,23,.92)";
+      context.strokeStyle = "#315b63";
+      roundedRect(context, 492, 28, 296, 72, 10);
+      context.fill();
+      context.stroke();
+      context.fillStyle = "#d8edf0";
+      context.font = "900 14px Bahnschrift, Segoe UI";
+      context.textAlign = "center";
+      context.fillText("LINHA DE TRIAGEM QS-01", 640, 55);
+      context.fillStyle = victory ? COLORS.green : COLORS.cyan;
+      context.font = "800 10px Bahnschrift, Segoe UI";
+      context.fillText(victory ? "ORDEM VALIDADA • DESPACHANDO" : "PROCESSAMENTO MANUAL ATIVO", 640, 78);
+      context.restore();
     }
 
     _drawSegmentZones(snapshot) {
@@ -280,6 +563,26 @@
         `ZONA ATIVA  •  POSIÇÕES ${snapshot.segment.start + 1}–${snapshot.segment.end + 1}`,
         COLORS.cyan,
       );
+      context.restore();
+    }
+
+    _drawActiveZoneFrame(snapshot) {
+      if (!snapshot.segment) return;
+
+      const context = this.context;
+      const startX = this.boxX(snapshot.segment.start) - BOX_SIZE / 2 - 24;
+      const endX = this.boxX(snapshot.segment.end) + BOX_SIZE / 2 + 24;
+      context.save();
+      context.shadowColor = COLORS.cyan;
+      context.shadowBlur = 15;
+      context.strokeStyle = "rgba(48,230,242,.86)";
+      context.lineWidth = 3;
+      roundedRect(context, startX, 188, endX - startX, 350, 12);
+      context.stroke();
+      context.shadowBlur = 0;
+      context.fillStyle = COLORS.cyan;
+      context.fillRect(startX - 3, 226, 6, 264);
+      context.fillRect(endX - 3, 226, 6, 264);
       context.restore();
     }
 
@@ -356,36 +659,153 @@
 
     _drawConveyor(now, moving) {
       const context = this.context;
-      context.fillStyle = "#091a1f";
-      context.fillRect(184, 432, 914, 70);
-      context.fillStyle = "#183a42";
-      context.fillRect(184, 436, 914, 38);
-      context.fillStyle = "#2c5c64";
-      const offset = moving ? (now / 12) % 54 : 0;
-      for (let x = 192 - offset; x < 1100; x += 54) {
-        context.fillRect(x, 441, 33, 27);
+      const offset = moving ? (now / 7) % 64 : 0;
+      context.save();
+      context.fillStyle = "#07171b";
+      context.fillRect(0, 387, WIDTH, 94);
+
+      context.save();
+      context.beginPath();
+      context.rect(0, 390, WIDTH, 86);
+      context.clip();
+      context.fillStyle = "#244a52";
+      context.fillRect(0, 390, WIDTH, 23);
+      context.fillStyle = moving ? "#39717a" : "#2b5961";
+      for (let x = -64 + offset; x < WIDTH; x += 64) {
+        context.beginPath();
+        context.moveTo(x, 392);
+        context.lineTo(x + 40, 392);
+        context.lineTo(x + 54, 410);
+        context.lineTo(x + 14, 410);
+        context.closePath();
+        context.fill();
       }
-      context.fillStyle = "#0a171b";
-      context.fillRect(164, 426, 24, 82);
-      context.fillRect(1094, 426, 24, 82);
-      context.strokeStyle = "#356872";
-      context.strokeRect(184, 432, 914, 70);
-      for (let x = 240; x < 1080; x += 190) {
-        context.fillStyle = "#102a31";
-        context.fillRect(x, 500, 18, 60);
+
+      context.fillStyle = "#102a31";
+      context.fillRect(0, 414, WIDTH, 62);
+      for (let x = 22; x < WIDTH; x += 58) {
+        context.fillStyle = "#07181d";
+        context.beginPath();
+        context.arc(x, 444, 19, 0, Math.PI * 2);
+        context.fill();
+        context.strokeStyle = moving ? COLORS.cyan : "#31545b";
+        context.lineWidth = 3;
+        context.beginPath();
+        context.arc(x, 444, 12, 0, Math.PI * 2);
+        context.stroke();
       }
+      context.restore();
+
+      context.strokeStyle = "#376771";
+      context.lineWidth = 3;
+      context.beginPath();
+      context.moveTo(0, 390);
+      context.lineTo(WIDTH, 390);
+      context.moveTo(0, 476);
+      context.lineTo(WIDTH, 476);
+      context.stroke();
+      context.fillStyle = "#16343b";
+      for (let x = 128; x < WIDTH; x += 256) {
+        context.fillRect(x, 477, 24, 83);
+        context.fillStyle = "rgba(83,132,141,.24)";
+        context.fillRect(x + 3, 477, 3, 83);
+        context.fillStyle = "#1a3b43";
+        context.fillRect(x - 14, 552, 52, 9);
+        context.fillStyle = "#16343b";
+      }
+      context.restore();
+    }
+
+    _drawConveyorForeground(now, victory = false) {
+      const context = this.context;
+      const scannerPulse = 0.25 + (Math.sin(now / 120) + 1) * 0.18;
+      context.save();
+
+      context.fillStyle = "rgba(3,13,17,.97)";
+      context.fillRect(0, 282, 158, 126);
+      context.fillStyle = "#102d35";
+      context.strokeStyle = "#37636b";
+      context.lineWidth = 3;
+      context.fillRect(158, 268, 30, 151);
+      context.strokeRect(158, 268, 30, 151);
+      context.fillRect(0, 268, 188, 25);
+      context.strokeRect(0, 268, 188, 25);
+      context.fillStyle = "rgba(48,230,242,.14)";
+      context.fillRect(151, 294, 5, 108);
+      context.fillStyle = COLORS.cyan;
+      context.beginPath();
+      context.arc(173, 284, 4, 0, Math.PI * 2);
+      context.fill();
+
+      context.fillStyle = "rgba(3,13,17,.97)";
+      context.fillRect(1123, 282, 157, 126);
+      context.fillStyle = "#102d35";
+      context.strokeStyle = victory ? COLORS.green : "#37636b";
+      context.lineWidth = 3;
+      context.fillRect(1095, 268, 30, 151);
+      context.strokeRect(1095, 268, 30, 151);
+      context.fillRect(1095, 268, 185, 25);
+      context.strokeRect(1095, 268, 185, 25);
+      context.fillStyle = victory
+        ? `rgba(101,237,154,${scannerPulse})`
+        : "rgba(48,230,242,.14)";
+      context.fillRect(1126, 294, 5, 108);
+      context.fillStyle = victory ? COLORS.green : COLORS.cyan;
+      context.beginPath();
+      context.arc(1110, 284, 4, 0, Math.PI * 2);
+      context.fill();
+      context.restore();
+    }
+
+    _getVictoryBoxOffset(now, victory = false) {
+      if (!victory || this.victoryStartedAt === null) return 0;
+      const progress = clamp(
+        (now - this.victoryStartedAt - VICTORY_CONVEYOR_DELAY) / VICTORY_CONVEYOR_DURATION,
+        0,
+        1,
+      );
+      return easeInOutCubic(progress) * 1180;
+    }
+
+    _getBoxEntranceState(index, boxCount, progress = null) {
+      const finalX = this.boxX(index);
+      if (!Number.isFinite(progress)) return { visible: true, x: finalX };
+
+      const phase = clamp(progress, 0, 1) * boxCount;
+      const entranceOrder = boxCount - 1 - index;
+      if (phase < entranceOrder) return { visible: false, x: BOX_ENTRY_X };
+
+      const entranceProgress = clamp(phase - entranceOrder, 0, 1);
+      if (entranceProgress < 1) {
+        return {
+          visible: true,
+          x: lerp(BOX_ENTRY_X, BOX_START_X, easeOutCubic(entranceProgress)),
+        };
+      }
+
+      const conveyorSteps = clamp(phase - entranceOrder - 1, 0, index);
+      return {
+        visible: true,
+        x: BOX_START_X + BOX_GAP * conveyorSteps,
+      };
     }
 
     _drawBoxes(frame, now) {
       const snapshot = frame.snapshot;
+      const victoryOffset = this._getVictoryBoxOffset(now, frame.victory);
       snapshot.values.forEach((value, index) => {
+        const entrance = this._getBoxEntranceState(
+          index,
+          snapshot.values.length,
+          frame.boxEntranceProgress,
+        );
         const isInExchange = frame.manualSwap
           && (index === frame.manualSwap.a || index === frame.manualSwap.b);
         const isBeingCarried = !frame.manualSwap && snapshot.selected === index;
-        if (isInExchange || isBeingCarried) return;
+        if (!entrance.visible || isInExchange || isBeingCarried) return;
 
         this._drawBox({
-          x: this.boxX(index),
+          x: entrance.x + victoryOffset,
           y: BOX_Y,
           value,
           index,
