@@ -36,6 +36,11 @@
       this.nearbyIndex = null;
       this.manualSwap = null;
       this.paused = false;
+      this.manualPaused = false;
+      this.menuOpen = false;
+      this.menuPausedGame = false;
+      this.pauseStartedAt = null;
+      this.accumulatedPauseMs = 0;
       this.modalOpen = true;
       this.victoryShown = false;
       this.phaseCommitted = false;
@@ -70,16 +75,63 @@
       this.ui.showStatus("Nova run iniciada. Pontuação, tempo e erros foram reiniciados.");
     }
 
+    togglePause() {
+      if (!this.liveSession.playerId || this.modalOpen || this.victoryShown) return;
+      if (this.paused) {
+        this._resumePause(true);
+        return;
+      }
+
+      this._beginPause(true);
+    }
+
+    _beginPause(manual = false) {
+      if (!this.paused && this.runStartedAt !== null) {
+        this.pauseStartedAt = performance.now();
+      }
+      this.paused = true;
+      this.manualPaused = this.manualPaused || manual;
+      if (!manual) this.input.clear();
+      this._stopRobotMotion();
+      this.ui.setPaused(true);
+    }
+
+    _resumePause(focusCanvas = false) {
+      if (this.pauseStartedAt !== null) {
+        this.accumulatedPauseMs += Math.max(0, performance.now() - this.pauseStartedAt);
+        this.pauseStartedAt = null;
+      }
+      this.paused = false;
+      this.manualPaused = false;
+      this.input.enabled = !this.modalOpen && !this.victoryShown;
+      this.lastFrameTime = performance.now();
+      this.ui.setPaused(false);
+      if (focusCanvas) this.canvas.focus();
+    }
+
     _bindEvents() {
       this.ui.onTutorialVisibilityChange = (isOpen) => {
         this.modalOpen = isOpen;
-        this.input.enabled = !isOpen && !this.victoryShown;
+        this.input.enabled = !isOpen && !this.victoryShown && !this.paused;
         this.input.clear();
-        if (!isOpen) {
+        if (!isOpen && !this.paused) {
           this._ensureRunStarted();
           this.canvas.focus();
         }
       };
+      this.ui.onMenuVisibilityChange = (isOpen) => {
+        this.menuOpen = isOpen;
+        if (isOpen) {
+          this.menuPausedGame = !this.modalOpen && !this.victoryShown && !this.paused;
+          if (this.menuPausedGame) this._beginPause(true);
+          return;
+        }
+        if (this.menuPausedGame) {
+          this.menuPausedGame = false;
+          if (this.paused) this._resumePause(true);
+        }
+      };
+      this.ui.onPauseToggle = () => this.togglePause();
       this.ui.onRestart = () => this.restart();
       this.ui.onStart = (playerName) => this._joinAndStart(playerName);
       this.ui.onResume = () => this._resumeSavedSession();
@@ -87,19 +139,25 @@
       this.ui.onPlayAgain = () => this._beginRun(false);
 
       window.addEventListener("blur", () => {
-        if (!this.modalOpen && !this.victoryShown) this.paused = true;
-      });
-      this.canvas.addEventListener("pointerdown", () => {
         if (!this.modalOpen && !this.victoryShown) {
-          this.paused = false;
-          this.canvas.focus();
+          this._beginPause(false);
         }
       });
-      this.canvas.addEventListener("keydown", () => {
-        if (!this.modalOpen && !this.victoryShown) this.paused = false;
+      this.canvas.addEventListener("pointerdown", () => {
+        if (this.modalOpen || this.victoryShown) return;
+        if (this.menuOpen) this.ui.closeMenu();
+        if (this.paused) this._resumePause(true);
+        else this.canvas.focus();
+      });
+      this.canvas.addEventListener("keydown", (event) => {
+        if (event.code !== "KeyP" && !this.modalOpen && !this.victoryShown && !this.manualPaused) {
+          this._resumePause(false);
+        }
       });
       document.addEventListener("visibilitychange", () => {
-        if (document.hidden && !this.modalOpen && !this.victoryShown) this.paused = true;
+        if (document.hidden && !this.modalOpen && !this.victoryShown) {
+          this._beginPause(false);
+        }
       });
     }
 
@@ -169,6 +227,8 @@
         manualSwap: manualSwapForFrame,
         paused: this.paused,
         modalOpen: this.modalOpen || this.victoryShown,
+        manualPaused: this.manualPaused,
+        menuOpen: this.menuOpen,
         victory: snapshot.state === GameState.VICTORY,
       });
 
@@ -377,9 +437,13 @@
       this.completedErrors = 0;
       this.manualSwap = null;
       this.paused = true;
+      this.manualPaused = false;
+      this.menuOpen = false;
+      this.menuPausedGame = false;
       this.victoryShown = false;
       this.input.enabled = false;
       this.input.clear();
+      this.ui.setPaused(false);
       this.engine.reset();
       this.renderer.resetEffects();
       this.ui.showStartMenu({
@@ -394,6 +458,8 @@
       this.runSerial += 1;
       this.runStartedAt = showTutorial ? null : performance.now();
       this.runFinishedAt = null;
+      this.pauseStartedAt = null;
+      this.accumulatedPauseMs = 0;
       this.runCompleted = false;
       this.completedScoreDelta = 0;
       this.completedErrors = 0;
@@ -411,7 +477,12 @@
 
     _getRunStats(snapshot, now = performance.now()) {
       const end = this.runFinishedAt ?? now;
-      const timeMs = this.runStartedAt === null ? 0 : Math.max(0, end - this.runStartedAt);
+      const activePauseMs = this.pauseStartedAt === null
+        ? 0
+        : Math.max(0, end - this.pauseStartedAt);
+      const timeMs = this.runStartedAt === null
+        ? 0
+        : Math.max(0, end - this.runStartedAt - this.accumulatedPauseMs - activePauseMs);
       return calculateRunStats({
         phaseCount: PHASES.length,
         initialPhaseScore: INITIAL_SCORE,
@@ -479,6 +550,7 @@
           nearbyIndex: this.nearbyIndex,
           manualSwap,
           paused: this.paused,
+          manualPaused: this.manualPaused,
           modalOpen: this.modalOpen || this.victoryShown,
           victory: snapshot.state === GameState.VICTORY,
         },
@@ -493,9 +565,14 @@
       this.robot = this._createRobot();
       this.nearbyIndex = null;
       this.paused = false;
+      this.manualPaused = false;
+      this.menuOpen = false;
+      this.menuPausedGame = false;
+      this.pauseStartedAt = null;
       this.victoryShown = false;
       this.phaseCommitted = false;
       this.ui.hideVictory();
+      this.ui.setPaused(false);
       this.ui.setPhase(phase);
       this.engine.configure(phase.values[PivotStrategy.FIRST], PivotStrategy.FIRST);
       this.input.clear();

@@ -9,7 +9,7 @@
       content="Sort Factory: aprenda Quick Sort organizando uma linha de produção."
     />
     <title>Sort Factory — Protocolo Pivô</title>
-    <link rel="stylesheet" href="style.css?v=20261105-8" />
+    <link rel="stylesheet" href="style.css?v=20261106-17" />
   </head>
   <body>
     <section class="mobile-blocker" role="alert" aria-labelledby="mobile-blocker-title">
@@ -40,10 +40,24 @@
             <span>OPERADOR</span>
             <strong id="player-display">AGUARDANDO</strong>
           </div>
-          <button id="help-button" class="hud-button" type="button">Como jogar</button>
-          <button id="restart-button" class="hud-button hud-button--danger" type="button">
-            Reiniciar run
+          <button id="pause-button" class="hud-button hud-button--pause" type="button" aria-pressed="false">
+            <span class="hud-button__icon" aria-hidden="true">⏸</span>
+            <span class="hud-button__label">Pausar</span>
           </button>
+          <div id="topbar-menu" class="topbar-menu">
+            <button
+              id="menu-toggle-button"
+              class="menu-toggle-button"
+              type="button"
+              aria-expanded="false"
+              aria-controls="topbar-menu-panel"
+              aria-label="Abrir menu"
+            >
+              <span class="menu-toggle-button__icon" aria-hidden="true">
+                <i></i><i></i><i></i>
+              </span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -81,23 +95,58 @@
           </div>
         </aside>
 
-        <div class="controls-hint" aria-hidden="true">
-          <span><kbd>WASD</kbd> / <kbd>↑↓←→</kbd> mover</span>
-          <span><kbd>Shift</kbd> correr</span>
-          <span><kbd>E</kbd> / <kbd>Espaço</kbd> interagir</span>
-        </div>
+        <aside id="topbar-menu-panel" class="game-menu-panel" aria-hidden="true">
+          <div class="game-menu-panel__header">
+            <span class="panel-label">MENU DA PARTIDA</span>
+            <strong>CONTROLES</strong>
+          </div>
+          <div id="menu-game-status" class="game-menu-panel__status" data-paused="true">
+            <i aria-hidden="true"></i>
+            <span>JOGO PAUSADO</span>
+          </div>
+          <div class="game-menu-panel__actions">
+            <button id="menu-pause-button" class="hud-button hud-button--pause" type="button" aria-pressed="false">
+              <span class="hud-button__icon" aria-hidden="true">⏸</span>
+              <span class="hud-button__label">Pausar</span>
+            </button>
+            <button
+              id="fullscreen-button"
+              class="hud-button hud-button--fullscreen"
+              type="button"
+              aria-pressed="false"
+              title="Abrir o jogo em tela cheia"
+            >
+              <span class="hud-button__icon hud-button__icon--fullscreen" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5" />
+                </svg>
+              </span>
+              <span class="hud-button__label">Tela cheia</span>
+            </button>
+            <button id="help-button" class="hud-button" type="button">
+              <span class="hud-button__icon" aria-hidden="true">?</span>
+              <span class="hud-button__label">Como jogar</span>
+            </button>
+            <button id="restart-button" class="hud-button hud-button--danger" type="button">
+              <span class="hud-button__icon" aria-hidden="true">↻</span>
+              <span class="hud-button__label">Reiniciar run</span>
+            </button>
+          </div>
+          <p class="game-menu-panel__hint"><kbd>P</kbd> alterna a pausa sem abrir o menu</p>
+        </aside>
       </section>
 
-      <section class="algorithm-strip" aria-label="Progresso do algoritmo">
+      <section class="algorithm-strip" aria-label="Progresso do algoritmo e controles">
         <div>
           <span class="panel-label">LINHA DE TRIAGEM</span>
           <div id="array-readout" class="array-readout" aria-live="polite"></div>
         </div>
-        <div class="legend" aria-label="Legenda visual">
-          <span><i class="legend__dot legend__dot--pivot"></i>Pivô</span>
-          <span><i class="legend__dot legend__dot--i"></i>Ponteiro i</span>
-          <span><i class="legend__dot legend__dot--j"></i>Ponteiro j</span>
-          <span><i class="legend__dot legend__dot--done"></i>Resolvido</span>
+        <div class="controls-hint" aria-label="Controles do jogo">
+          <span><kbd>WASD</kbd> / <kbd>↑↓←→</kbd> mover</span>
+          <span><kbd>Shift</kbd> correr</span>
+          <span><kbd>E</kbd> / <kbd>Espaço</kbd> interagir</span>
+          <span><kbd>P</kbd> pausar</span>
+          <span><kbd>F</kbd> tela cheia</span>
         </div>
       </section>
     </main>
@@ -203,14 +252,14 @@
       </section>
     </div>
 
-    <script src="js/constants.js?v=20261105-8" defer></script>
-    <script src="js/utils.js?v=20261105-8" defer></script>
-    <script src="js/quick-sort-engine.js?v=20261105-8" defer></script>
-    <script src="js/input-controller.js?v=20261105-8" defer></script>
-    <script src="js/ui-controller.js?v=20261105-8" defer></script>
-    <script src="js/renderer.js?v=20261105-8" defer></script>
-    <script src="js/live-session.js?v=20261105-8" defer></script>
-    <script src="js/run-scoring.js?v=20261105-8" defer></script>
-    <script src="js/game.js?v=20261105-8" defer></script>
+    <script src="js/constants.js?v=20261106-17" defer></script>
+    <script src="js/utils.js?v=20261106-17" defer></script>
+    <script src="js/quick-sort-engine.js?v=20261106-17" defer></script>
+    <script src="js/input-controller.js?v=20261106-17" defer></script>
+    <script src="js/ui-controller.js?v=20261106-17" defer></script>
+    <script src="js/renderer.js?v=20261106-17" defer></script>
+    <script src="js/live-session.js?v=20261106-17" defer></script>
+    <script src="js/run-scoring.js?v=20261106-17" defer></script>
+    <script src="js/game.js?v=20261106-17" defer></script>
   </body>
 </html>

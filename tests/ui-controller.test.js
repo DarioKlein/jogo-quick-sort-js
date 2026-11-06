@@ -12,6 +12,7 @@ class Element {
     this.attributes = {};
     this.textContent = "";
     this.value = "";
+    this.hidden = false;
     this.disabled = false;
     this.readOnly = false;
     this.offsetWidth = 100;
@@ -29,17 +30,29 @@ class Element {
   replaceChildren(...children) { this.children = children; }
   setAttribute(name, value) { this.attributes[name] = value; }
   focus() {}
-  click() { this.listeners.click?.(); }
+  click() { return this.listeners.click?.(); }
 }
 
 const elements = new Map();
+const documentListeners = {};
 const document = {
+  fullscreenElement: null,
+  documentElement: {
+    async requestFullscreen() {
+      document.fullscreenElement = document.documentElement;
+      documentListeners.fullscreenchange?.();
+    },
+  },
+  async exitFullscreen() {
+    document.fullscreenElement = null;
+    documentListeners.fullscreenchange?.();
+  },
   querySelector(selector) {
     if (!elements.has(selector)) elements.set(selector, new Element());
     return elements.get(selector);
   },
   createElement: () => new Element(),
-  addEventListener() {},
+  addEventListener(name, callback) { documentListeners[name] = callback; },
 };
 const context = {
   document,
@@ -88,4 +101,99 @@ assert.deepEqual(dots.children, initialDots, "retorno deve reaproveitar os ponto
 assert.equal(dots.classList.contains("tutorial-dots--back"), true);
 assert.equal(dots.children[0].classList.contains("is-active"), true);
 
-console.log("✓ UiController: indicador do tutorial e diálogo de recuperação");
+let pauseRequested = 0;
+const menuVisibilityChanges = [];
+ui.onPauseToggle = () => { pauseRequested += 1; };
+ui.onMenuVisibilityChange = (isOpen) => menuVisibilityChanges.push(isOpen);
+const menuToggle = elements.get("#menu-toggle-button");
+const topbarMenu = elements.get("#topbar-menu");
+const menuPanel = elements.get("#topbar-menu-panel");
+menuToggle.click();
+assert.equal(topbarMenu.classList.contains("is-open"), true);
+assert.equal(menuPanel.classList.contains("is-open"), true);
+assert.equal(menuPanel.attributes["aria-hidden"], "false");
+assert.equal(menuToggle.attributes["aria-expanded"], "true");
+assert.equal(menuToggle.attributes["aria-label"], "Fechar menu");
+ui.closeMenu();
+assert.equal(menuPanel.classList.contains("is-open"), false);
+menuToggle.click();
+elements.get("#menu-pause-button").click();
+assert.equal(topbarMenu.classList.contains("is-open"), false);
+assert.equal(menuPanel.classList.contains("is-open"), false);
+assert.equal(menuPanel.attributes["aria-hidden"], "true");
+assert.equal(pauseRequested, 1);
+assert.deepEqual(menuVisibilityChanges, [true, false, true, false]);
+elements.get("#pause-button").click();
+assert.equal(pauseRequested, 2);
+ui.setPaused(true);
+assert.equal(elements.get("#pause-button").attributes["aria-pressed"], "true");
+assert.equal(elements.get("#menu-game-status").attributes["data-paused"], "true");
+assert.match(elements.get("#pause-button").innerHTML, /Continuar/);
+assert.match(elements.get("#menu-pause-button").innerHTML, /Continuar/);
+
+async function testFullscreenToggle() {
+  const fullscreenButton = elements.get("#fullscreen-button");
+  assert.equal(fullscreenButton.hidden, false);
+  assert.equal(fullscreenButton.attributes["aria-pressed"], "false");
+
+  await fullscreenButton.click();
+  assert.equal(document.fullscreenElement, document.documentElement);
+  assert.equal(fullscreenButton.attributes["aria-pressed"], "true");
+  assert.match(fullscreenButton.innerHTML, /Sair da tela cheia/);
+
+  await fullscreenButton.click();
+  assert.equal(document.fullscreenElement, null);
+  assert.equal(fullscreenButton.attributes["aria-pressed"], "false");
+  assert.match(fullscreenButton.innerHTML, /Tela cheia/);
+
+  let shortcutPrevented = false;
+  await documentListeners.keydown({
+    code: "KeyF",
+    repeat: false,
+    target: { tagName: "BODY" },
+    preventDefault() { shortcutPrevented = true; },
+  });
+  assert.equal(shortcutPrevented, true);
+  assert.equal(document.fullscreenElement, document.documentElement);
+
+  await documentListeners.keydown({
+    code: "KeyF",
+    repeat: false,
+    target: { tagName: "BODY" },
+    preventDefault() {},
+  });
+  assert.equal(document.fullscreenElement, null);
+
+  await documentListeners.keydown({
+    code: "KeyF",
+    repeat: false,
+    target: { tagName: "INPUT" },
+    preventDefault() { throw new Error("atalho não deve capturar digitação em campos"); },
+  });
+  assert.equal(document.fullscreenElement, null);
+
+  let pauseShortcutPrevented = false;
+  await documentListeners.keydown({
+    code: "KeyP",
+    repeat: false,
+    target: { tagName: "BODY" },
+    preventDefault() { pauseShortcutPrevented = true; },
+  });
+  assert.equal(pauseShortcutPrevented, true);
+  assert.equal(pauseRequested, 3);
+
+  await documentListeners.keydown({
+    code: "KeyP",
+    repeat: false,
+    target: { tagName: "INPUT" },
+    preventDefault() { throw new Error("atalho de pausa não deve capturar digitação"); },
+  });
+  assert.equal(pauseRequested, 3);
+}
+
+testFullscreenToggle()
+  .then(() => console.log("✓ UiController: tutorial, menu, pausa, recuperação e tela cheia"))
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });

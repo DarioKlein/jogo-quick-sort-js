@@ -16,6 +16,13 @@
         errors: document.querySelector("#errors"),
         array: document.querySelector("#array-readout"),
         status: document.querySelector("#status-message"),
+        pause: document.querySelector("#pause-button"),
+        menuPause: document.querySelector("#menu-pause-button"),
+        topbarMenu: document.querySelector("#topbar-menu"),
+        menuPanel: document.querySelector("#topbar-menu-panel"),
+        menuGameStatus: document.querySelector("#menu-game-status"),
+        menuToggle: document.querySelector("#menu-toggle-button"),
+        fullscreen: document.querySelector("#fullscreen-button"),
         help: document.querySelector("#help-button"),
         restart: document.querySelector("#restart-button"),
         playerChip: document.querySelector("#player-chip"),
@@ -51,6 +58,8 @@
       this.playerName = "";
       this.statusTimer = null;
       this.onTutorialVisibilityChange = () => {};
+      this.onMenuVisibilityChange = () => {};
+      this.onPauseToggle = () => {};
       this.onRestart = () => {};
       this.onStart = () => {};
       this.onResume = () => {};
@@ -58,6 +67,7 @@
       this.onPlayAgain = () => {};
 
       this._bindEvents();
+      this._updateFullscreenButton();
       this._renderTutorialPage();
     }
 
@@ -120,6 +130,18 @@
       this.elements.playerDisplay.textContent = state === "online" && this.playerName
         ? this.playerName.toUpperCase()
         : labels[state] ?? "ONLINE";
+    }
+
+    setPaused(isPaused) {
+      [this.elements.pause, this.elements.menuPause].forEach((button) => {
+        button.setAttribute("aria-pressed", String(isPaused));
+        button.innerHTML = isPaused
+          ? '<span class="hud-button__icon" aria-hidden="true">▶</span><span class="hud-button__label">Continuar</span>'
+          : '<span class="hud-button__icon" aria-hidden="true">⏸</span><span class="hud-button__label">Pausar</span>';
+      });
+      this.elements.menuGameStatus.setAttribute("data-paused", String(isPaused));
+      const statusLabel = this.elements.menuGameStatus.children?.[1];
+      if (statusLabel) statusLabel.textContent = isPaused ? "JOGO PAUSADO" : "JOGO EM ANDAMENTO";
     }
 
     setStartPending(isPending, pendingLabel = "Entrando na sala…") {
@@ -222,8 +244,34 @@
     }
 
     _bindEvents() {
-      this.elements.help.addEventListener("click", () => this.openTutorial(true));
-      this.elements.restart.addEventListener("click", () => this.onRestart());
+      const fullscreenSupported = typeof document.documentElement?.requestFullscreen === "function"
+        && typeof document.exitFullscreen === "function";
+      this.elements.fullscreen.hidden = !fullscreenSupported;
+      this.elements.menuToggle.addEventListener("click", () => {
+        this._setMenuOpen(!this.elements.topbarMenu.classList.contains("is-open"));
+      });
+      this.elements.pause.addEventListener("click", () => this.onPauseToggle());
+      this.elements.menuPause.addEventListener("click", () => {
+        this.onPauseToggle();
+        this._setMenuOpen(false);
+      });
+      this.elements.fullscreen.addEventListener("click", () => {
+        this._setMenuOpen(false);
+        this._toggleFullscreen();
+      });
+      document.addEventListener("fullscreenchange", () => this._updateFullscreenButton());
+      document.addEventListener("fullscreenerror", () => {
+        this.showStatus("O navegador não permitiu abrir o jogo em tela cheia.", true);
+        this._updateFullscreenButton();
+      });
+      this.elements.help.addEventListener("click", () => {
+        this._setMenuOpen(false);
+        this.openTutorial(true);
+      });
+      this.elements.restart.addEventListener("click", () => {
+        this._setMenuOpen(false);
+        this.onRestart();
+      });
       this.elements.playAgain.addEventListener("click", () => this.onPlayAgain());
       this.elements.startMission.addEventListener("click", () => {
         const playerName = this.elements.playerName.value.trim();
@@ -256,11 +304,77 @@
       });
 
       document.addEventListener("keydown", (event) => {
+        const target = event.target;
+        const tagName = String(target?.tagName ?? "").toUpperCase();
+        const isEditable = target?.isContentEditable
+          || ["INPUT", "TEXTAREA", "SELECT"].includes(tagName);
+        const hasShortcutModifier = event.ctrlKey || event.metaKey || event.altKey;
+        if (
+          event.code === "KeyP"
+          && !event.repeat
+          && !isEditable
+          && !hasShortcutModifier
+        ) {
+          event.preventDefault();
+          this.onPauseToggle();
+          this._setMenuOpen(false);
+          return undefined;
+        }
+        if (
+          event.code === "KeyF"
+          && !event.repeat
+          && !isEditable
+          && !hasShortcutModifier
+          && fullscreenSupported
+        ) {
+          event.preventDefault();
+          return this._toggleFullscreen();
+        }
         if (event.code === "Escape" && this.isTutorialOpen()) {
           event.preventDefault();
           this.closeTutorial();
+        } else if (event.code === "Escape") {
+          this._setMenuOpen(false);
         }
+        return undefined;
       });
+    }
+
+    _setMenuOpen(isOpen) {
+      const wasOpen = this.elements.topbarMenu.classList.contains("is-open");
+      if (wasOpen === isOpen) return;
+      this.elements.topbarMenu.classList.toggle("is-open", isOpen);
+      this.elements.menuPanel.classList.toggle("is-open", isOpen);
+      this.elements.menuPanel.setAttribute("aria-hidden", String(!isOpen));
+      this.elements.menuToggle.setAttribute("aria-expanded", String(isOpen));
+      this.elements.menuToggle.setAttribute("aria-label", isOpen ? "Fechar menu" : "Abrir menu");
+      this.onMenuVisibilityChange(isOpen);
+    }
+
+    closeMenu() {
+      this._setMenuOpen(false);
+    }
+
+    async _toggleFullscreen() {
+      try {
+        if (document.fullscreenElement) await document.exitFullscreen();
+        else await document.documentElement.requestFullscreen();
+      } catch {
+        this.showStatus("Não foi possível alternar o modo de tela cheia.", true);
+      } finally {
+        this._updateFullscreenButton();
+      }
+    }
+
+    _updateFullscreenButton() {
+      const isFullscreen = Boolean(document.fullscreenElement);
+      this.elements.fullscreen.setAttribute("aria-pressed", String(isFullscreen));
+      this.elements.fullscreen.title = isFullscreen
+        ? "Sair do modo de tela cheia"
+        : "Abrir o jogo em tela cheia";
+      this.elements.fullscreen.innerHTML = isFullscreen
+        ? '<span class="hud-button__icon hud-button__icon--fullscreen" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3v6H3M15 3v6h6M21 15h-6v6M3 15h6v6" /></svg></span><span class="hud-button__label">Sair da tela cheia</span>'
+        : '<span class="hud-button__icon hud-button__icon--fullscreen" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5" /></svg></span><span class="hud-button__label">Tela cheia</span>';
     }
 
     _changeTutorialPage(offset) {

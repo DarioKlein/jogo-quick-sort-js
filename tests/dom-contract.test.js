@@ -29,9 +29,28 @@ assertSelectorsExist("index.html", ["js/game.js", "js/ui-controller.js"]);
 assertSelectorsExist("dev.html", ["js/dev-dashboard.js"]);
 
 const gameHtml = read("index.html");
+const gameScript = read("js/game.js");
 assert.doesNotMatch(gameHtml, /data-pivot-strategy|data-phase-id/);
 assert.match(gameHtml, /id="run-time"/);
 assert.match(gameHtml, /id="victory-rank"/);
+assert.match(gameHtml, /id="fullscreen-button"/);
+assert.match(
+  gameScript,
+  /async _resumeSavedSession\(\)[\s\S]*?this\._beginRun\(false\)/,
+  "recuperar uma sessão deve iniciar a run sem repetir o tutorial",
+);
+assert.match(gameHtml, /id="topbar-menu-panel" class="game-menu-panel"/);
+assert.ok(
+  gameHtml.indexOf('id="player-chip"') < gameHtml.indexOf('id="topbar-menu-panel"'),
+  "identificação do operador deve permanecer fora do menu lateral",
+);
+assert.match(gameHtml, /<kbd>F<\/kbd> tela cheia/);
+assert.match(gameHtml, /<kbd>P<\/kbd> pausar/);
+assert.doesNotMatch(gameHtml, /class="legend"/);
+assert.ok(
+  gameHtml.indexOf('class="controls-hint"') > gameHtml.indexOf('class="algorithm-strip"'),
+  "dicas de teclado devem ficar na faixa inferior do jogo",
+);
 assert.ok(
   gameHtml.indexOf("js/live-session.js") < gameHtml.indexOf("js/game.js"),
   "live-session.js deve carregar antes de game.js",
