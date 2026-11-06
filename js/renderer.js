@@ -360,14 +360,14 @@
       context.strokeStyle = "#39717a";
       context.lineWidth = 2.5;
       context.beginPath();
-      context.arc(250, 92, 19, 0, Math.PI * 2);
+      context.arc(250, 92, 15, 0, Math.PI * 2);
       context.fill();
       context.stroke();
       context.strokeStyle = "#ffc845";
       context.lineWidth = 3;
       context.beginPath();
       context.moveTo(250, 92);
-      context.lineTo(250 + Math.cos(now / 1800) * 11, 92 + Math.sin(now / 1800) * 11);
+      context.lineTo(250 + Math.cos(now / 1800) * 9, 92 + Math.sin(now / 1800) * 9);
       context.stroke();
       context.restore();
     }
