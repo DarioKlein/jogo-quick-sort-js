@@ -167,6 +167,13 @@ async function run() {
       assert.ok(fs.existsSync(path.join(root, match[0])), `asset ausente: ${match[0]}`);
     }
   }
-  console.log("✓ Cena de vitória: sequência final, áudio único, cancelamento e assets");
+  const victoryCss = fs.readFileSync(path.join(root, "cena-vitoria/cena-vitoria.css"), "utf8");
+  assert.match(victoryCss, /engineer-word-warm 1\.8s linear infinite/);
+  assert.match(victoryCss, /background-image: linear-gradient\(90deg, #ffe066, #ffc845, #ff8f3d, #ffe066\)/);
+  assert.match(
+    victoryCss,
+    /\.engineer-scene--with-results \.engineer-scene__controls \{ margin-top: 10px; \}/,
+  );
+  console.log("✓ Cena de vitória: resultados combinados, bloqueio da fala, cancelamento e assets");
 }
 run().catch(error => { console.error(error); process.exitCode = 1; });

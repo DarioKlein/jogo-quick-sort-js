@@ -136,7 +136,13 @@
 }
 .engineer-dialog__text span { opacity: 0; transform: translateY(3px); transition: opacity 90ms linear, transform 140ms ease; }
 .engineer-dialog__text span.is-visible { opacity: 1; transform: translateY(0); }
-.engineer-dialog__text span.is-emphasis.is-visible { color: var(--gold, #ffc845); animation: engineer-word-pulse 300ms ease-out; }
+.engineer-dialog__text span.is-emphasis.is-visible {
+  display: inline-block; color: transparent; text-shadow: none;
+  background-image: linear-gradient(90deg, #ffe066, #ffc845, #ff8f3d, #ffe066);
+  background-size: 200% 100%; background-clip: text;
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  animation: engineer-word-warm 1.8s linear infinite;
+}
 .engineer-dialog__gear {
   position: absolute; right: 13px; bottom: 7px; color: rgba(231, 189, 104, .42);
   font-size: 1.45rem; line-height: 1;
@@ -222,7 +228,10 @@
   62% { opacity: .5; transform: scale(.95); }
   100% { opacity: 0; transform: scale(.8); }
 }
-@keyframes engineer-word-pulse { 50% { text-shadow: 0 0 12px rgba(255, 200, 69, .72); transform: scale(1.035); } }
+@keyframes engineer-word-warm {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
 @keyframes engineer-continue-blink { 50% { opacity: .25; transform: translateY(2px); } }
 @media (max-width: 760px) {
   .engineer-scene { padding: 12px; }
