@@ -67,6 +67,10 @@ async function run() {
   try {
     assert.equal((await fetch(baseUrl)).status, 200);
     assert.equal((await fetch(`${baseUrl}/dev`)).status, 200);
+    const speech = await fetch(`${baseUrl}/assets/muito_bom_mas_da_pra_melhorar.ogg`);
+    assert.equal(speech.status, 200);
+    assert.match(speech.headers.get("content-type"), /audio\/ogg/);
+    assert.equal(Buffer.from(await speech.arrayBuffer()).subarray(0, 4).toString(), "OggS");
 
     const invalidJoin = await requestJson(`${baseUrl}/api/players/join`, {
       method: "POST",

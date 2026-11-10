@@ -11,12 +11,13 @@ const PLAYER_TIMEOUT_MS = 15_000;
 const PLAYER_RECONNECT_TIMEOUT_MS = 120_000;
 const ROSTER_THROTTLE_MS = 500;
 const MAX_BODY_BYTES = 96 * 1024;
-const PUBLIC_EXTENSIONS = new Set([".html", ".css", ".js", ".png", ".svg", ".ico"]);
+const PUBLIC_EXTENSIONS = new Set([".html", ".css", ".js", ".png", ".svg", ".ico", ".ogg"]);
 const CONTENT_TYPES = Object.freeze({
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".png": "image/png",
+  ".ogg": "audio/ogg",
   ".svg": "image/svg+xml; charset=utf-8",
   ".ico": "image/x-icon",
 });
