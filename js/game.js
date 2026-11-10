@@ -465,6 +465,7 @@
     }
 
     _handleSessionEnded() {
+      this.ui.victoryScene?.cancel();
       window.clearTimeout(this.phaseTransitionTimer);
       this.runSerial += 1;
       this.runStartedAt = null;

@@ -230,6 +230,15 @@
     }
 
     showRunComplete(result) {
+      if (namespace.VictoryScene) {
+        this.victoryScene ??= new namespace.VictoryScene();
+        this.victoryScene.start(() => this._showRunResults(result));
+        return;
+      }
+      this._showRunResults(result);
+    }
+
+    _showRunResults(result) {
       this.elements.victoryLesson.textContent = `Penalidade por tempo: −${result.timePenalty} pontos. Melhor resultado: ${result.bestScore} pontos em ${formatDuration(result.bestTimeMs)}.`;
       this.elements.victoryScore.textContent = result.score;
       this.elements.victoryTime.textContent = formatDuration(result.timeMs);
@@ -240,6 +249,7 @@
     }
 
     hideVictory() {
+      this.victoryScene?.cancel();
       this.elements.victory.classList.add("modal--hidden");
     }
 
