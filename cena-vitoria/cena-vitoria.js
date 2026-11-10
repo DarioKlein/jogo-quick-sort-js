@@ -5,7 +5,7 @@
   const WORDS = SPEECH.split(" ");
   const FALLBACK_DURATION = 2780;
   const SPRITES = {
-    engineer: "/assets/victory/sprites/portrait-talk.png?v=20261110-5",
+    engineer: "/assets/victory/sprites/portrait-talk.png?v=20261110-6"
   };
   const audio = new Audio(
     namespace.VICTORY_AUDIO_SOURCE || "/assets/muito_bom_mas_da_pra_melhorar.ogg",

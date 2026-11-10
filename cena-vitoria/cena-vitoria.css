@@ -43,13 +43,37 @@
   filter: drop-shadow(0 14px 18px rgba(0, 0, 0, .22));
 }
 .engineer-scene__lamp-glow {
-  position: absolute; z-index: 3; top: 7%; left: 69%; width: 20%; aspect-ratio: 1;
-  border-radius: 50%; background: rgba(255, 212, 109, .08);
-  box-shadow: 0 0 24px 10px rgba(255, 200, 69, .24); opacity: 0;
+  /* Centro do filamento na arte 1024 × 1536; âncora fixa em qualquer tamanho. */
+  position: absolute; z-index: 3; top: 12.2%; left: 79%; width: 18%; aspect-ratio: 1;
+  transform: translate(-50%, -50%); border-radius: 50%; opacity: 0;
+  background: radial-gradient(circle, rgba(255, 244, 189, .5), rgba(255, 200, 69, .25) 35%, transparent 72%);
+  box-shadow: 0 0 22px 7px rgba(255, 190, 64, .24);
   pointer-events: none;
+}
+.engineer-scene__lamp-glow::before,
+.engineer-scene__lamp-glow::after {
+  content: ""; position: absolute; border-radius: 50%; opacity: 0;
+}
+.engineer-scene__lamp-glow::before {
+  inset: 4%; border: 1px solid rgba(255, 222, 139, .75);
+  background: radial-gradient(circle, transparent 52%, rgba(255, 205, 96, .15) 68%, transparent 74%);
+}
+.engineer-scene__lamp-glow::after {
+  inset: 22%;
+  background:
+    radial-gradient(ellipse 13% 50%, rgba(255, 250, 220, .8), transparent),
+    radial-gradient(ellipse 50% 13%, rgba(255, 240, 186, .65), transparent),
+    radial-gradient(circle, #fff9dc 0, rgba(255, 230, 137, .8) 12%, transparent 58%);
+  box-shadow: 0 0 12px 2px rgba(255, 224, 133, .32);
 }
 .engineer-scene[data-state="cheer"] .engineer-scene__lamp-glow {
   animation: engineer-lamp-cheer 1.1s ease-out both;
+}
+.engineer-scene[data-state="cheer"] .engineer-scene__lamp-glow::before {
+  animation: engineer-lamp-ring 1.1s ease-out both;
+}
+.engineer-scene[data-state="cheer"] .engineer-scene__lamp-glow::after {
+  animation: engineer-lamp-core 1.1s ease-in-out both;
 }
 
 .engineer-scene__message {
@@ -92,7 +116,7 @@
   width: 94px; aspect-ratio: 1; align-self: center;
   border: 3px solid #1c100a; outline: 2px solid #e7bd68; outline-offset: -5px;
   clip-path: polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px);
-  background-color: #173a41; background-image: url("/assets/victory/sprites/portrait-talk.png?v=20261110-5");
+  background-color: #173a41; background-image: url("/assets/victory/sprites/portrait-talk.png?v=20261110-6");
   background-repeat: no-repeat; background-size: 330% auto; background-position: 39% 0;
   filter: drop-shadow(3px 4px 0 rgba(0, 0, 0, .45));
 }
@@ -156,9 +180,23 @@
   100% { opacity: 1; transform: scale(1); }
 }
 @keyframes engineer-lamp-cheer {
-  0% { opacity: 0; transform: scale(.9); }
-  60% { opacity: 1; box-shadow: 0 0 48px 22px rgba(255, 200, 69, .52); transform: scale(1.13); }
-  100% { opacity: 0; transform: scale(1); }
+  0% { opacity: 0; }
+  22% { opacity: .45; }
+  42% { opacity: 1; }
+  65% { opacity: .65; }
+  100% { opacity: 0; }
+}
+@keyframes engineer-lamp-ring {
+  0%, 22% { opacity: 0; transform: scale(.65); }
+  40% { opacity: .65; transform: scale(.95); }
+  100% { opacity: 0; transform: scale(1.7); }
+}
+@keyframes engineer-lamp-core {
+  0% { opacity: 0; transform: scale(.65); }
+  25% { opacity: .4; transform: scale(.85); }
+  42% { opacity: .95; transform: scale(1.12); }
+  62% { opacity: .5; transform: scale(.95); }
+  100% { opacity: 0; transform: scale(.8); }
 }
 @keyframes engineer-word-pulse { 50% { text-shadow: 0 0 12px rgba(255, 200, 69, .72); transform: scale(1.035); } }
 @keyframes engineer-continue-blink { 50% { opacity: .25; transform: translateY(2px); } }
