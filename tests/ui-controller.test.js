@@ -211,8 +211,54 @@ async function testFullscreenToggle() {
   assert.equal(restartRequested, 1);
 }
 
+async function testVictoryFlow() {
+  const result = {
+    score: 3240,
+    timeMs: 120000,
+    errors: 4,
+    rank: 1,
+    timePenalty: 120,
+    bestScore: 3500,
+    bestTimeMs: 98000,
+  };
+
+  ui.showRunComplete(result);
+  assert.equal(elements.get("#victory-modal").classList.contains("modal--hidden"), false);
+  assert.equal(elements.get("#victory-score").textContent, "3240");
+  assert.equal(elements.get("#victory-time").textContent, "02:00");
+  assert.equal(elements.get("#victory-errors").textContent, "4");
+  assert.equal(elements.get("#victory-rank").textContent, "#1");
+  assert.match(elements.get("#victory-lesson").textContent, /Penalidade por tempo: −120 pontos/);
+  ui.hideVictory();
+
+  let startedResult;
+  let completeVictory;
+  context.window.SortFactory.VictoryScene = class {
+    start(view, callback) {
+      startedResult = view;
+      completeVictory = callback;
+    }
+    cancel() { completeVictory = null; }
+  };
+
+  ui.showRunComplete(result);
+  assert.equal(elements.get("#victory-modal").classList.contains("modal--hidden"), true);
+  assert.equal(startedResult.phaseLabel, "3 FASES FINALIZADAS");
+  assert.equal(startedResult.score, "3240");
+  assert.equal(startedResult.time, "02:00");
+  assert.equal(startedResult.errors, "4");
+  assert.equal(startedResult.rank, "#1");
+
+  let restarted = 0;
+  ui.onPlayAgain = () => { restarted += 1; };
+  completeVictory();
+  assert.equal(restarted, 1);
+  ui.hideVictory();
+}
+
 testFullscreenToggle()
-  .then(() => console.log("✓ UiController: tutorial, menu, pausa, recuperação e tela cheia"))
+  .then(testVictoryFlow)
+  .then(() => console.log("✓ UiController: tutorial, menu, pausa, recuperação, tela cheia e vitória"))
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;

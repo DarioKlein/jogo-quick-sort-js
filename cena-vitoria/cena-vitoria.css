@@ -1,5 +1,5 @@
 .engineer-scene[hidden] { display: none; }
-.engineer-scene button[hidden] { display: none; }
+.engineer-scene [hidden] { display: none; }
 
 .engineer-scene {
   position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center;
@@ -157,11 +157,36 @@
 .engineer-scene[data-bubble="closed"] .engineer-dialog { visibility: hidden; opacity: 0; transform: scale(.92); }
 .engineer-scene[data-bubble="opening"] .engineer-dialog { animation: engineer-dialog-open 220ms steps(4, end) both; }
 .engineer-scene[data-bubble="completed"] .engineer-dialog__continue { opacity: 1; animation: engineer-continue-blink 750ms steps(2, end) infinite; }
-.engineer-scene[data-bubble="closing"] .engineer-dialog { opacity: 0; transform: scale(.96); transition: opacity 220ms ease, transform 220ms ease; }
+.engineer-scene[data-state="final"] .engineer-dialog__continue { opacity: 0; animation: none; }
 
 .engineer-scene__notice {
   min-height: 2.8em; margin: 14px 0 7px; color: var(--muted, #83aab4); font-size: .86rem; line-height: 1.45;
 }
+.engineer-scene__result { display: grid; gap: 9px; margin-top: 12px; }
+.engineer-scene__result .victory-phase { margin: 0; font-size: .66rem; }
+.engineer-scene__result .victory-stats { margin: 0; gap: 8px; }
+.engineer-scene__result .victory-stats span { padding: 8px 10px; font-size: .72rem; }
+.engineer-scene__result .victory-stats strong { font-size: 1.05rem; }
+.engineer-scene__result .victory-lesson {
+  margin: 0; padding: 9px 11px; font-size: .76rem; line-height: 1.4;
+}
+.engineer-scene--with-results .engineer-scene__message { padding: clamp(24px, 4vw, 38px); }
+.engineer-scene--with-results .engineer-scene__title {
+  margin-bottom: 18px; font-size: clamp(1.9rem, 3.4vw, 2.7rem);
+}
+.engineer-scene--with-results .engineer-dialog { min-height: 184px; }
+.engineer-scene--with-results .engineer-dialog__inner {
+  min-height: 174px; grid-template-columns: 78px 1fr; gap: 14px; padding: 26px 20px 17px 18px;
+}
+.engineer-scene--with-results .engineer-dialog__portrait { width: 78px; }
+.engineer-scene--with-results .engineer-dialog__text {
+  min-height: 2.5em; font-size: clamp(1.18rem, 1.9vw, 1.7rem);
+}
+.engineer-scene--with-results .engineer-scene__notice {
+  min-height: 0; margin: 8px 0 0; font-size: .78rem;
+}
+.engineer-scene--with-results .engineer-scene__notice:empty { display: none; }
+.engineer-scene--with-results .engineer-scene__controls { margin-top: 10px; }
 .engineer-scene__controls { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
 .engineer-scene button {
   min-height: 40px; border: 1px solid var(--line, rgba(130, 220, 231, .2)); border-radius: 9px;
@@ -170,7 +195,6 @@
 }
 .engineer-scene button:hover { border-color: rgba(48, 230, 242, .46); transform: translateY(-1px); }
 .engineer-scene button:focus-visible { outline: 3px solid white; outline-offset: 3px; }
-.engineer-scene button[data-action="skip"] { background: transparent; }
 .engineer-scene button[data-action="continue"] { border-color: transparent; background: var(--gold, #ffc845); color: #201701; }
 
 @keyframes engineer-dialog-open {
@@ -215,6 +239,19 @@
   .engineer-dialog__portrait { width: 72px; }
   .engineer-dialog__text { font-size: 1.24rem; }
   .engineer-dialog::after { display: none; }
+  .engineer-scene--with-results .engineer-scene__message { padding: 20px 16px; }
+  .engineer-scene--with-results .engineer-scene__title {
+    margin-bottom: 14px; font-size: 1.8rem;
+  }
+  .engineer-scene--with-results .engineer-dialog { min-height: 176px; }
+  .engineer-scene--with-results .engineer-dialog__inner {
+    min-height: 166px; grid-template-columns: 62px 1fr; gap: 10px; padding: 24px 14px 16px;
+  }
+  .engineer-scene--with-results .engineer-dialog__portrait { width: 62px; }
+  .engineer-scene--with-results .engineer-dialog__text { font-size: 1.08rem; }
+  .engineer-scene--with-results .engineer-scene__result .victory-stats span {
+    padding: 7px 8px;
+  }
 }
 
 @media (max-height: 720px) and (min-width: 761px) {
@@ -223,6 +260,9 @@
   .engineer-scene__message { padding-block: 26px; }
   .engineer-dialog { min-height: 190px; }
   .engineer-dialog__inner { min-height: 180px; }
+  .engineer-scene--with-results .engineer-scene__message { padding-block: 22px; }
+  .engineer-scene--with-results .engineer-dialog { min-height: 176px; }
+  .engineer-scene--with-results .engineer-dialog__inner { min-height: 166px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

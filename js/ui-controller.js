@@ -3,6 +3,7 @@
 
   const { PHASES, TUTORIAL_PAGES } = namespace.Constants;
   const { formatDuration } = namespace.Utils;
+  const COMBINED_VICTORY_RESULTS = true;
 
   class UiController {
     constructor() {
@@ -232,18 +233,34 @@
     showRunComplete(result) {
       if (namespace.VictoryScene) {
         this.victoryScene ??= new namespace.VictoryScene();
-        this.victoryScene.start(() => this._showRunResults(result));
+        if (COMBINED_VICTORY_RESULTS) {
+          this.victoryScene.start(this._buildVictoryResultView(result), () => this.onPlayAgain());
+        } else {
+          this.victoryScene.start(null, () => this._showRunResults(result));
+        }
         return;
       }
       this._showRunResults(result);
     }
 
+    _buildVictoryResultView(result) {
+      return {
+        phaseLabel: `${PHASES.length} FASES FINALIZADAS`,
+        score: String(result.score),
+        time: formatDuration(result.timeMs),
+        errors: String(result.errors),
+        rank: result.rank ? `#${result.rank}` : "—",
+        lesson: `Penalidade por tempo: −${result.timePenalty} pontos. Melhor resultado: ${result.bestScore} pontos em ${formatDuration(result.bestTimeMs)}.`,
+      };
+    }
+
     _showRunResults(result) {
-      this.elements.victoryLesson.textContent = `Penalidade por tempo: −${result.timePenalty} pontos. Melhor resultado: ${result.bestScore} pontos em ${formatDuration(result.bestTimeMs)}.`;
-      this.elements.victoryScore.textContent = result.score;
-      this.elements.victoryTime.textContent = formatDuration(result.timeMs);
-      this.elements.victoryErrors.textContent = result.errors;
-      this.elements.victoryRank.textContent = result.rank ? `#${result.rank}` : "—";
+      const view = this._buildVictoryResultView(result);
+      this.elements.victoryLesson.textContent = view.lesson;
+      this.elements.victoryScore.textContent = view.score;
+      this.elements.victoryTime.textContent = view.time;
+      this.elements.victoryErrors.textContent = view.errors;
+      this.elements.victoryRank.textContent = view.rank;
       this.elements.victory.classList.remove("modal--hidden");
       window.setTimeout(() => this.elements.playAgain.focus(), 0);
     }
