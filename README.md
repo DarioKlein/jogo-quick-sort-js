@@ -57,7 +57,7 @@ No painel `/dev`, os cards de sessões ativas permitem assistir às partidas:
 - use o seletor **Partida** na transmissão ou os botões dos cards para alternar entre jogadores;
 - a troca encerra a conexão anterior e mostra o estado de conexão ou reconexão da nova partida;
 - atualizar o painel e remover um registro exibem feedback de carregamento, bloqueiam cliques duplicados e permitem tentar novamente em caso de erro;
-- no ranking, jogadores que não estão mais online exibem um botão `-` para remover o nome e todo o histórico. O nome fica livre para uma nova entrada.
+- no ranking, jogadores que não estão mais online exibem um botão `×` para remover o nome e todo o histórico. O nome fica livre para uma nova entrada.
 
 ## Regra ensinada
 
@@ -80,10 +80,7 @@ Em cada subarray:
 5. após o cruzamento, o pivô troca de posição com `j`;
 6. o processo continua primeiro no lado esquerdo e depois no direito.
 
-Ao terminar uma fase, o jogo avança automaticamente. Depois do pior caso, registra a pontuação e o
-tempo total da run. A pontuação reúne as três fases e perde 3 pontos por segundo e 5 pontos por erro;
-em caso de empate no ranking, vence o menor tempo e depois o menor número de erros. Uma nova tentativa
-preserva o melhor resultado anterior do jogador.
+Ao terminar uma fase, o jogo avança automaticamente. Depois do pior caso, exibe a cena final do Engenheiro Sábio e registra a pontuação e o tempo total da run. A pontuação reúne as três fases (base de `1.000` pontos por fase, totalizando `3.000` pontos iniciais, além de `+20` pontos por inspeção correta) e perde 3 pontos por segundo e 5 pontos por erro; em caso de empate no ranking, vence o menor tempo e depois o menor número de erros. Uma nova tentativa preserva o melhor resultado anterior do jogador.
 
 Durante uma troca, a primeira caixa selecionada fica nas mãos do robô. Ao chegar à segunda posição e interagir, essa caixa ocupa o encaixe e a caixa deslocada passa para as mãos do robô. O jogador precisa caminhar de volta ao primeiro encaixe vazio e interagir novamente para concluir a troca. O robô nunca percorre esse caminho automaticamente.
 
@@ -98,12 +95,21 @@ O projeto usa módulos no padrão IIFE, compartilhados pelo namespace `window.So
 ├── style.css
 ├── dev.css
 ├── server.js                 # servidor HTTP, sessões ao vivo e ranking temporário em JSON
+├── assets/
+│   ├── muito_bom_mas_da_pra_melhorar.ogg
+│   └── victory/
+│       └── sprites/
+│           └── portrait-talk.png
+├── cena-vitoria/
+│   ├── audio-vitoria.js      # áudio da fala final embutido para reprodução confiável
+│   ├── cena-vitoria.css      # estilos e animações da cena do Engenheiro Sábio
+│   └── cena-vitoria.js       # sequência animada de vitória, legenda e resultados
 ├── js/
 │   ├── constants.js          # configuração imutável e conteúdo do tutorial
 │   ├── utils.js              # funções puras compartilhadas
 │   ├── quick-sort-engine.js  # máquina de estados e regras do algoritmo
 │   ├── input-controller.js   # teclado e normalização de movimento
-│   ├── ui-controller.js      # HUD, tutorial e modal de vitória
+│   ├── ui-controller.js      # HUD, tutorial e integração com a vitória
 │   ├── renderer.js           # cenário e animações no Canvas 2D
 │   ├── live-session.js       # envio temporário do estado do jogador
 │   ├── run-scoring.js        # pontuação acumulada e penalidade por tempo
@@ -111,9 +117,17 @@ O projeto usa módulos no padrão IIFE, compartilhados pelo namespace `window.So
 │   ├── dev-dashboard.js      # ranking e reprodução das partidas ao vivo
 │   └── game.js               # ciclo do jogo e coordenação dos módulos
 └── tests/
+    ├── dev-dashboard.test.js
+    ├── dom-contract.test.js
+    ├── input-controller.test.js
+    ├── live-session.test.js
     ├── quick-sort-engine.test.js
     ├── renderer-smoke.test.js
-    └── server.test.js
+    ├── run-scoring.test.js
+    ├── server.test.js
+    ├── spectator-buffer.test.js
+    ├── ui-controller.test.js
+    └── victory-scene.test.js
 ```
 
 A lógica do algoritmo não depende do Canvas ou do DOM. Isso permite testá-la isoladamente e impede que erros de interface corrompam o vetor.
@@ -141,7 +155,7 @@ reinicialização limpa do JSON, transmissão e renderização em Canvas simulad
 ## Limitações do MVP
 
 - três fases fixas com seis caixas cada;
-- controles por teclado, sem interface de toque dedicada;
+- controles por teclado, sem interface de toque (dispositivos móveis exibem aviso para abrir em computador);
 - ranking mantido somente durante a execução atual do servidor;
 - painel do apresentador sem autenticação, destinado somente à rede local da apresentação;
-- áudio não incluído nesta versão.
+- áudio restrito à fala final da cena de vitória, sem trilha sonora ou efeitos sonoros durante as fases.
