@@ -2,6 +2,8 @@
 
 Jogo educativo 2D no qual o jogador executa cada etapa do Quick Sort caminhando por uma fábrica, inspecionando ponteiros e transportando caixas físicas com um robô.
 
+![Sort Factory — partida em andamento com pivô, ponteiros i e j e o robô na esteira](assets/pg01.png)
+
 ## Como executar
 
 Não há dependências externas nem banco de dados. O servidor local usa apenas recursos nativos do
@@ -97,6 +99,7 @@ O projeto usa módulos no padrão IIFE, compartilhados pelo namespace `window.So
 ├── server.js                 # servidor HTTP, sessões ao vivo e ranking temporário em JSON
 ├── assets/
 │   ├── muito_bom_mas_da_pra_melhorar.ogg
+│   ├── pg01.png              # captura de tela da partida usada no README
 │   └── victory/
 │       └── sprites/
 │           └── portrait-talk.png
